@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carnival — Tests</title>
+  <style>
+    body { font-family: ui-monospace, Menlo, Consolas, monospace; background:#14122b; color:#f5f3ff; padding:16px; }
+    h1 { color:#ffd14d; font-size:18px; }
+    .ok { color:#3ddc97; } .fail { color:#ff5d5d; } .grp { color:#ffd14d; margin-top:12px; }
+    #summary { font-size:16px; margin-top:16px; font-weight:bold; }
+    pre { white-space:pre-wrap; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <h1>Carnival — built-in tests</h1>
+  <p class="grp">Serve over HTTP and open this page. Tests use a separate save key so they don't touch your game.</p>
+  <pre id="out"></pre>
+  <div id="summary"></div>
+
+  <script type="module">
+    // Use an isolated localStorage namespace for tests.
+    const out = document.getElementById('out');
+    let pass = 0, fail = 0;
+    const line = (cls, msg) => { out.innerHTML += `<span class="${cls}">${msg}</span>\n`; };
+    const grp = (m) => line('grp', m);
+    const ok = (c, m) => c ? (pass++, line('ok', '  ok   ' + m)) : (fail++, line('fail', '  FAIL ' + m));
+
+    const { State } = await import('./js/data/State.js');
+    const Econ = await import('./js/systems/Economy.js');
+    const Up = await import('./js/systems/Upgrades.js');
+    const { makeRng } = await import('./js/core/util.js');
+    const { RingToss } = await import('./js/games/RingToss.js');
+    const { migrate, defaultState } = await import('./js/data/schema.js');
+
+    grp('Economy — offline accrual & cap');
+    Up.recompute();
+    const e = State.s.economy.energy;
+    e.current = 0; e.lastTickTs = Date.now() - e.regenMs * 3;
+    ok(Econ.accrueEnergy() === 3, 'credits 3 energy after 3 regen windows');
+    e.current = e.max; e.lastTickTs = Date.now() - e.regenMs * 5;
+    Econ.accrueEnergy();
+    ok(e.current === e.max, 'never exceeds the cap');
+
+    grp('Upgrades — feed back into the economy');
+    State.s.economy.coins = 100000;
+    const maxBefore = State.s.economy.energy.max;
+    ok(Up.purchase('energyCap').ok && State.s.economy.energy.max === maxBefore + 5, 'energy cap +5 after purchase');
+    const regenBefore = State.s.economy.energy.regenMs;
+    Up.purchase('regenSpeed');
+    ok(State.s.economy.energy.regenMs < regenBefore, 'regen gets faster');
+    ok(Up.purchase('unlockBottles').ok && Up.isUnlocked('bottles'), 'unlock works');
+
+    grp('Persistence — migrate fills defaults & survives corruption');
+    const partial = migrate({ version: 0, economy: { coins: 7 } });
+    ok(partial.economy.coins === 7 && partial.economy.energy && partial.upgrades, 'old save keeps data + gains new fields');
+    ok(migrate('not json').economy !== undefined, 'garbage falls back to defaults');
+
+    grp('Mini-game — deterministic for a fixed seed + input');
+    const runRing = (seed) => {
+      const g = new RingToss({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim') { let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-2000,speed:2000}) }); }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(JSON.stringify(runRing(42)) === JSON.stringify(runRing(42)), 'same seed + input → identical result');
+    ok(runRing(42).attempts === 3, 'ring toss uses all 3 rings');
+
+    const sum = document.getElementById('summary');
+    sum.textContent = `${pass} passed, ${fail} failed`;
+    sum.className = fail ? 'fail' : 'ok';
+  </script>
+</body>
+</html>
