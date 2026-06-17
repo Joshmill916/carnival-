@@ -2,8 +2,7 @@
 import { Scene } from '../core/SceneManager.js';
 import { createModal, toast } from '../ui/Modal.js';
 import { State } from '../data/State.js';
-import { recompute } from '../systems/Upgrades.js';
-import { SCHEMA_VERSION } from '../data/schema.js';
+import { recompute } from '../systems/Progression.js';
 
 export class SettingsScene extends Scene {
   onEnter() {

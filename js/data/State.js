@@ -24,8 +24,8 @@ class GameState {
     this.data = freshState();
     saveNow(this.data);
     bus.emit('state:reset');
-    bus.emit('economy:changed');
-    bus.emit('upgrades:changed');
+    bus.emit('wallet:changed');
+    bus.emit('progress:changed');
   }
   reload() {
     this.data = loadState();

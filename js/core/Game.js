@@ -13,7 +13,7 @@ import { BoothPromptScene } from '../scenes/BoothPromptScene.js';
 import { MiniGameScene } from '../scenes/MiniGameScene.js';
 import { ResultsScene } from '../scenes/ResultsScene.js';
 import { StoreScene } from '../scenes/StoreScene.js';
-import { UpgradesScene } from '../scenes/UpgradesScene.js';
+import { PrizeScene } from '../scenes/PrizeScene.js';
 import { SettingsScene } from '../scenes/SettingsScene.js';
 
 export class Game {
@@ -25,8 +25,8 @@ export class Game {
     this.scenes = new SceneManager(this);
 
     this.hud = new HUD({
+      onPrizes: () => this.openPrizes(),
       onStore: () => this.openStore(),
-      onUpgrades: () => this.openUpgrades(),
       onSettings: () => this.openSettings(),
     });
     this.hud.hide();
@@ -45,7 +45,7 @@ export class Game {
     this.scenes.register('MiniGame', (g) => new MiniGameScene(g));
     this.scenes.register('Results', (g) => new ResultsScene(g));
     this.scenes.register('Store', (g) => new StoreScene(g));
-    this.scenes.register('Upgrades', (g) => new UpgradesScene(g));
+    this.scenes.register('Prizes', (g) => new PrizeScene(g));
     this.scenes.register('Settings', (g) => new SettingsScene(g));
   }
 
@@ -75,14 +75,13 @@ export class Game {
     this.scenes.pop({ dismissedBoothId: boothId });
   }
   playBooth(booth) {
-    // Called from the prompt or the results screen (both are the top overlay).
     this.scenes.replace('MiniGame', { booth });
   }
   openStore() {
     this.scenes.push('Store');
   }
-  openUpgrades() {
-    this.scenes.push('Upgrades');
+  openPrizes() {
+    this.scenes.push('Prizes');
   }
   openSettings() {
     this.scenes.push('Settings');

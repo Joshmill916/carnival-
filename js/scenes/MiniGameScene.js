@@ -1,10 +1,9 @@
-// Host scene that wraps a pure MiniGame instance and owns the economy side:
-// spends energy on entry, converts the final score to tickets (× prize
-// multiplier), awards coin bonuses on big wins, and routes to the results screen.
+// Host scene that wraps a pure MiniGame instance and owns progression: counts
+// the play, converts the final score to tickets (× any level bonus), and routes
+// to the results screen. Play is free and unlimited.
 import { Scene } from '../core/SceneManager.js';
 import { GAMES, scoreToTickets } from '../games/registry.js';
-import { spendEnergy, canPlay, addTickets, addCoins } from '../systems/Economy.js';
-import { getEffectiveStats } from '../systems/Upgrades.js';
+import { registerPlay, awardTickets, prizeMultiplier } from '../systems/Progression.js';
 import { State } from '../data/State.js';
 import { makeRng } from '../core/util.js';
 import { toast } from '../ui/Modal.js';
@@ -18,12 +17,7 @@ export class MiniGameScene extends Scene {
       toast('That game is not available yet.');
       return this.game.toMap();
     }
-    if (!canPlay(booth.cost)) {
-      toast('Not enough energy.');
-      return this.game.toMap();
-    }
-    spendEnergy(booth.cost);
-    State.s.stats.plays++;
+    registerPlay();
 
     this.game.hud.hide();
     this.game.input.setMode('gesture');
@@ -56,11 +50,11 @@ export class MiniGameScene extends Scene {
 
   _finish() {
     const r = this.instance.getResult();
-    const stats = getEffectiveStats();
+    const mult = prizeMultiplier();
     const base = scoreToTickets(r.gameKey, r.score);
-    const tickets = Math.round(base * stats.prizeMultiplier);
-    if (tickets > 0) addTickets(tickets);
-    if (r.bigWin && r.coinBonus > 0) addCoins(r.coinBonus);
+    const bonus = r.bigWin ? r.coinBonus : 0; // perfect-clear ticket bonus
+    const tickets = Math.round((base + bonus) * mult);
+    const award = awardTickets(tickets);
 
     // Track best score per game.
     const best = State.s.stats.best;
@@ -72,7 +66,8 @@ export class MiniGameScene extends Scene {
     this.game.scenes.replace('Results', {
       result: r,
       tickets,
-      multiplier: stats.prizeMultiplier,
+      multiplier: mult,
+      leveledTo: award.leveledTo,
       booth: this.booth,
     });
   }

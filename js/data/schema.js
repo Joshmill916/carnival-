@@ -1,17 +1,13 @@
 // The single source of truth for the saved game shape, its version, and migration.
 import { clone, deepMergeDefaults } from '../core/util.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const SAVE_KEY = 'carnival.save.v1';
 
-// Base economy tuning. These are the LEVEL-0 values; Upgrades derives the
-// effective max/regen/multiplier from these plus the player's purchased levels.
+// Base tuning. Play is now free and unlimited — progression comes from your
+// Level (climbs as you play) and the Prize Booth (redeem + trade up tickets).
 export const BASE = {
-  energyStart: 5,
-  energyMax: 10, // upgradable
-  regenMs: 10 * 60 * 1000, // 10 min per energy at level 0 (upgradable)
-  playCost: 1, // energy spent per game play
-  startingCoins: 50,
+  startingTickets: 0,
 };
 
 export function defaultState() {
@@ -25,30 +21,26 @@ export function defaultState() {
     },
     player: {
       name: 'Player',
-      pos: { x: 600, y: 520 }, // spawn near the centre of the fairground
-      facing: 'down',
+      pos: { x: 600, y: 640 }, // spawn on the central plaza
+      facing: 'up',
     },
-    economy: {
-      energy: {
-        current: BASE.energyStart,
-        max: BASE.energyMax, // overwritten by Upgrades at boot
-        regenMs: BASE.regenMs, // overwritten by Upgrades at boot
-        lastTickTs: 0, // ms epoch of last credited unit; set on first save
-      },
-      tickets: 0, // soft currency won from games
-      coins: BASE.startingCoins, // currency for upgrades + store
+    // How far you've come. Level rises with total tickets earned and opens up
+    // more of the fair (higher prize tiers, future games).
+    progress: {
+      level: 1,
+      playsTotal: 0,
+      ticketsEarnedTotal: 0,
     },
-    upgrades: {
-      levels: { energyCap: 0, regenSpeed: 0, prizeMult: 0 },
-      unlocked: { rings: true, bottles: false, darts: false }, // ring toss free at start
+    // Soft currency won from games and spent in the Prize Booth.
+    wallet: {
+      tickets: BASE.startingTickets,
+    },
+    // Prizes you own: { prizeId: count }. Trade 3 of a tier up to 1 better prize.
+    prizes: {
+      inventory: {},
     },
     stats: {
-      plays: 0,
-      ticketsEarnedTotal: 0,
       best: { rings: 0, bottles: 0, darts: 0 },
-    },
-    store: {
-      purchases: [], // [{ productId, receipt, ts }]
     },
   };
 }
@@ -60,8 +52,28 @@ export function migrate(raw) {
   let s = raw;
   if (s.version === undefined) s.version = 0;
 
-  // Forward migration chain goes here as the schema evolves, e.g.:
-  // if (s.version < 2) { /* transform */ s.version = 2; }
+  // v0/v1 → v2: the old energy/coins/upgrades economy is gone. Carry over any
+  // tickets the player had into the new wallet, then let defaults fill the rest.
+  if (s.version < 2) {
+    const carriedTickets =
+      (s.wallet && s.wallet.tickets) ||
+      (s.economy && s.economy.tickets) ||
+      0;
+    const earnedTotal =
+      (s.progress && s.progress.ticketsEarnedTotal) ||
+      (s.stats && s.stats.ticketsEarnedTotal) ||
+      carriedTickets;
+    s.wallet = { tickets: carriedTickets };
+    s.progress = {
+      level: 1,
+      playsTotal: (s.stats && s.stats.plays) || 0,
+      ticketsEarnedTotal: earnedTotal,
+    };
+    delete s.economy;
+    delete s.upgrades;
+    delete s.store;
+    s.version = 2;
+  }
 
   s = deepMergeDefaults(s, defaultState());
   s.version = SCHEMA_VERSION;
