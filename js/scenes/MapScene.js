@@ -29,6 +29,7 @@ export class MapScene extends Scene {
     this.walkPhase = 0;
     this.t = 0;
     this.dismissedBoothId = null;
+    this.dismissedLockedId = null;
     this.foodNearId = null;
     this.fx = new Particles(); // world-space effects: food eruptions, landing dust
     this._resetRider();
@@ -41,6 +42,7 @@ export class MapScene extends Scene {
     this.game.input.setMode('move');
     this.game.hud.show();
     this.foodNearId = null;
+    this.dismissedLockedId = null;
     this._resetRider();
     if (result?.dismissedBoothId) this.dismissedBoothId = result.dismissedBoothId;
   }
@@ -126,9 +128,19 @@ export class MapScene extends Scene {
       }
       if (!near) {
         this.dismissedBoothId = null;
-      } else if (near.id !== this.dismissedBoothId) {
-        this.dismissedBoothId = near.id;
-        this.game.openBoothPrompt(near);
+        this.dismissedLockedId = null;
+      } else {
+        const currentLevel = this.game.state.s.progress.level;
+        if (near.minLevel > currentLevel) {
+          // Locked booth — show a one-time hint, suppress the game prompt.
+          if (near.id !== this.dismissedLockedId) {
+            this.dismissedLockedId = near.id;
+            this.fx.text(near.x, near.y - 80, `🔒 Level ${near.minLevel} to unlock`, '#ffd14d', 18);
+          }
+        } else if (near.id !== this.dismissedBoothId) {
+          this.dismissedBoothId = near.id;
+          this.game.openBoothPrompt(near);
+        }
       }
     }
   }
@@ -262,7 +274,8 @@ export class MapScene extends Scene {
     const drawables = [];
     for (const ride of RIDES) drawables.push({ y: ride.y + ride.r, draw: () => drawRide(ctx, ride, this.t) });
     for (const f of FOOD) drawables.push({ y: f.y + 35, draw: () => drawFoodStall(ctx, f) });
-    for (const b of BOOTHS) drawables.push({ y: b.y + 62, draw: () => drawBooth(ctx, b, this.t) });
+    const currentLevel = this.game.state.s.progress.level;
+    for (const b of BOOTHS) drawables.push({ y: b.y + 62, draw: () => drawBooth(ctx, b, this.t, b.minLevel > currentLevel) });
     for (const n of this.npcs) drawables.push({ y: n.y, draw: () => drawNPC(ctx, n, this.t) });
     drawables.push({ y: this.pos.y, draw: () => this._drawPlayer(ctx) });
     drawables.sort((a, b) => a.y - b.y);

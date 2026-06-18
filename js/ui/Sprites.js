@@ -188,16 +188,19 @@ export function drawFoodStall(ctx, food) {
 }
 
 // --- Booths ------------------------------------------------------------------
-export function drawBooth(ctx, booth, t) {
-  const { x, y, color, name, emoji } = booth;
+export function drawBooth(ctx, booth, t, locked = false) {
+  const { x, y, color, name, emoji, minLevel } = booth;
   const w = 168, h = 124;
   const left = x - w / 2, top = y - h / 2;
   shadow(ctx, x, top + h + 2, w * 0.55, 12);
 
+  ctx.save();
+  if (locked) ctx.globalAlpha = 0.45;
+
   // Body with a soft gradient.
   const g = ctx.createLinearGradient(0, top + 30, 0, top + h);
-  g.addColorStop(0, '#f3e2b8');
-  g.addColorStop(1, '#d9bd86');
+  g.addColorStop(0, locked ? '#c0b8a8' : '#f3e2b8');
+  g.addColorStop(1, locked ? '#a09080' : '#d9bd86');
   ctx.fillStyle = g;
   roundRect(ctx, left, top + 30, w, h - 30, 8);
   ctx.fill();
@@ -207,9 +210,10 @@ export function drawBooth(ctx, booth, t) {
   ctx.fillRect(left, top + h - 22, w, 22);
 
   // Striped awning.
+  const awningColor = locked ? '#888' : color;
   const stripes = 7, sw = w / stripes;
   for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? color : '#fff7e6';
+    ctx.fillStyle = i % 2 === 0 ? awningColor : '#fff7e6';
     ctx.beginPath();
     ctx.moveTo(left + i * sw, top + 30);
     ctx.lineTo(left + i * sw + sw, top + 30);
@@ -220,26 +224,37 @@ export function drawBooth(ctx, booth, t) {
   }
 
   // Sign banner.
-  ctx.fillStyle = '#2b2b3e';
+  ctx.fillStyle = locked ? '#444455' : '#2b2b3e';
   roundRect(ctx, x - 64, top - 16, 128, 26, 6);
   ctx.fill();
-  ctx.fillStyle = '#ffd14d';
+  ctx.fillStyle = locked ? '#aaa' : '#ffd14d';
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(name, x, top - 3);
 
-  // Big emoji + a glow pulse to draw the eye.
-  const pulse = 0.5 + 0.5 * Math.sin(t * 2 + x);
-  ctx.save();
-  ctx.globalAlpha = 0.25 + pulse * 0.2;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x, top + h - 30, 30, 0, Math.PI * 2);
-  ctx.fill();
+  if (locked) {
+    // Lock icon + level requirement.
+    ctx.font = '30px serif';
+    ctx.fillText('🔒', x, top + h - 36);
+    ctx.fillStyle = '#ccc';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillText(`Level ${minLevel}`, x, top + h - 10);
+  } else {
+    // Big emoji + a glow pulse to draw the eye.
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2 + x);
+    ctx.save();
+    ctx.globalAlpha = 0.25 + pulse * 0.2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, top + h - 30, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.font = '34px serif';
+    ctx.fillText(emoji, x, top + h - 30);
+  }
+
   ctx.restore();
-  ctx.font = '34px serif';
-  ctx.fillText(emoji, x, top + h - 30);
 }
 
 // --- Trees -------------------------------------------------------------------
