@@ -32,6 +32,11 @@
     const { makeRng } = await import('./js/core/util.js');
     const { RingToss } = await import('./js/games/RingToss.js');
     const { HighStriker } = await import('./js/games/HighStriker.js');
+    const { ClawMachine } = await import('./js/games/ClawMachine.js');
+    const { BBGunStar } = await import('./js/games/BBGunStar.js');
+    const { RailBowling } = await import('./js/games/RailBowling.js');
+    const { BasketToss } = await import('./js/games/BasketToss.js');
+    const { GoldfishToss } = await import('./js/games/GoldfishToss.js');
 
     grp('Persistence — migrate carries tickets, drops old economy');
     const m = migrate({ version: 1, economy: { tickets: 42, coins: 5 }, stats: { plays: 7 } });
@@ -80,6 +85,87 @@
     };
     ok(runStriker(7).score === 30 && runStriker(7).bigWin, 'max-power swings ring the bell: 30 + bigWin');
     ok(runStriker(7).attempts === 3, 'high striker uses all 3 swings');
+
+    grp('Claw Machine — completes 3 attempts');
+    const runClaw = (seed) => {
+      const g = new ClawMachine({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim' && g.claw.phase === 'idle') {
+          let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'tap',x:200,y:500}) });
+        }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runClaw(1).attempts === 3, 'claw machine uses all 3 attempts');
+    ok(runClaw(1).gameKey === 'claw', 'claw machine returns correct gameKey');
+
+    grp('BB Gun Star — all 12 shots fire and score');
+    const runBBGun = (seed) => {
+      const g = new BBGunStar({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim') {
+          let c=false;
+          g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'tap',x:200,y:308}) });
+        }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runBBGun(1).attempts === 12, 'bb gun uses all 12 shots');
+    ok(runBBGun(1).score >= 0 && runBBGun(1).score <= 10, 'bb gun score in valid range');
+
+    grp('Rail Bowling — 3 rolls complete');
+    const runRailBowl = (seed) => {
+      const g = new RailBowling({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 8000) {
+        if (g.phase === 'aim' && !g.ball) {
+          let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-1000,speed:1000}) });
+        }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runRailBowl(1).attempts === 3, 'rail bowling uses all 3 rolls');
+    ok(runRailBowl(1).score > 0, 'sweet-spot swipe clears the bump and scores');
+
+    grp('Basket Toss — 3 throws complete');
+    const runBasket = (seed) => {
+      const g = new BasketToss({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim' && !g.ball) {
+          let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-1800,speed:1800}) });
+        }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runBasket(1).attempts === 3, 'basket toss uses all 3 throws');
+    ok(runBasket(1).gameKey === 'basket', 'basket toss returns correct gameKey');
+
+    grp('Goldfish Toss — 5 balls thrown');
+    const runGoldfish = (seed) => {
+      const g = new GoldfishToss({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim' && !g.ball) {
+          let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-1600,speed:1600}) });
+        }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runGoldfish(1).attempts === 5, 'goldfish toss uses all 5 balls');
+    ok(runGoldfish(1).gameKey === 'goldfish', 'goldfish toss returns correct gameKey');
 
     State.reset();
     const sum = document.getElementById('summary');

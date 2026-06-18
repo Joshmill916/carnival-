@@ -11,8 +11,9 @@ progress locally — no account, no server, nothing uploaded.
   lower part of the screen). On desktop, use **WASD / arrow keys**. The fair has
   animated rides (Ferris wheel, carousel), food stalls, wandering people, trees
   and twinkling string lights.
-- **Walk up to a booth** to play — all three are open from the start, and play is
-  **free and unlimited**:
+- **Walk up to a booth** to play. Four booths are open from the start; five more
+  **unlock as your Level climbs**, so there's always a new game to work toward.
+  Play is **free and unlimited**:
   - 🎯 **Ring Toss** — swipe up toward a peg to lob a ring. A harder swipe reaches
     the farther, higher-value pegs. 3 rings.
   - 🎳 **Bottle Knockdown** — swipe up to throw a baseball and topple the stack.
@@ -21,6 +22,18 @@ progress locally — no account, no server, nothing uploaded.
     balloons are worth more.
   - 🔨 **High Striker** — swipe up *hard* to send the puck up the strongman
     tower. Ring the bell at the top for the max score. 3 swings.
+  - 🦾 **Claw Machine** *(Level 2)* — tap where to drop the claw; line it up with
+    a prize to grab it. 3 grabs.
+  - ⭐ **BB Gun Star** *(Level 3)* — tap to fire BBs and shoot the whole red star
+    off the paper target. 12 shots.
+  - 🎳 **Rail Bowling** *(Level 4)* — swipe up to roll the ball over the bump; find
+    the sweet spot so it stays on the far side. 3 rolls.
+  - 🧺 **Basket Toss** *(Level 5)* — swipe up to bounce a softball off the angled
+    board and into the basket. 3 throws.
+  - 🐟 **Goldfish Toss** *(Level 6)* — swipe toward a fishbowl to land a ball and
+    win the goldfish. Farther bowls pay more. 5 balls.
+- **Locked booths** show a 🔒 and the Level that opens them, so you always know
+  what's next.
 - **Win 🎟️ tickets** from every game — every win bursts into confetti, a
   fanfare and a screen shake.
 - **Mess around the fair:** walk onto a **ride** (Ferris wheel or carousel) and
@@ -32,8 +45,8 @@ progress locally — no account, no server, nothing uploaded.
 
 - Every game pays out **🎟️ tickets**. Tickets do two things: they fund the Prize
   Booth, and your lifetime total raises your **⭐ Level**.
-- **Leveling up opens up the fair** — higher prize tiers unlock as you climb, and
-  later levels add a ticket bonus and reserve slots for future games.
+- **Leveling up opens up the fair** — new games (see the booth list above) and
+  higher prize tiers unlock as you climb, and later levels add a ticket bonus.
 - The **🎁 Prize Booth** is where you spend tickets:
   - **Redeem** tickets for prizes across five tiers (lollipops → giant pandas).
   - **Trade up**: turn 3 prizes of one tier into 1 prize of the next tier up.
@@ -67,7 +80,8 @@ js/core/    engine: loop, scene manager, renderer/camera, input, storage, audio
 js/data/    save schema + migration, shared state, content definitions
 js/systems/ progression (tickets + levels), prizes (redeem + trade up), store
 js/scenes/  boot, map, booth prompt, mini-game host, results, store, prizes, settings
-js/games/   mini-game base + ring toss / bottle knockdown / balloon darts / high striker
+js/games/   mini-game base + 9 games (ring toss, bottles, darts, high striker,
+            claw machine, BB gun star, rail bowling, basket toss, goldfish toss)
 js/ui/      HUD, modal helper, procedural sprites, particles
 ```
 

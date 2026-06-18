@@ -186,6 +186,18 @@
 }
 .setting-row input { width: 22px; height: 22px; }
 
+/* ---- Dev: test all games ------------------------------------------------ */
+.setting-section { margin-top: 12px; }
+.setting-head { font-weight: 600; margin: 0 0 6px; opacity: 0.85; }
+.dev-game-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.dev-game-btn { font-size: 13px; padding: 8px 6px; }
+
 /* ---- Toast -------------------------------------------------------------- */
 .toast {
   position: absolute;
