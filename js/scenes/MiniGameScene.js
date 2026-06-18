@@ -8,6 +8,7 @@ import { State } from '../data/State.js';
 import { makeRng } from '../core/util.js';
 import { toast } from '../ui/Modal.js';
 import { Audio } from '../core/Audio.js';
+import { Particles } from '../ui/Particles.js';
 
 export class MiniGameScene extends Scene {
   onEnter({ booth }) {
@@ -22,9 +23,14 @@ export class MiniGameScene extends Scene {
     this.game.hud.hide();
     this.game.input.setMode('gesture');
 
-    const view = { w: this.game.renderer.width, h: this.game.renderer.height };
-    this.instance = new GameClass(view, makeRng(), {});
+    this.view = { w: this.game.renderer.width, h: this.game.renderer.height };
+    this.instance = new GameClass(this.view, makeRng(), {});
     this.instance.init();
+    this.fx = new Particles();         // screen-space confetti for the win moment
+    this.finishing = false;
+    this.celebrating = false;
+    this.celebrateT = 0;
+    this.banner = '';
     this._addQuitButton();
   }
 
@@ -43,12 +49,19 @@ export class MiniGameScene extends Scene {
 
   update(dt) {
     if (!this.instance) return;
+    if (this.celebrating) {
+      this.celebrateT -= dt;
+      this.fx.update(dt);
+      if (this.celebrateT <= 0) this._goResults();
+      return;
+    }
     this.instance.handleInput(this.game.input);
     this.instance.update(dt);
-    if (this.instance.isDone()) this._finish();
+    if (this.instance.isDone() && !this.finishing) this._finish();
   }
 
   _finish() {
+    this.finishing = true;
     const r = this.instance.getResult();
     const mult = prizeMultiplier();
     const base = scoreToTickets(r.gameKey, r.score);
@@ -63,17 +76,47 @@ export class MiniGameScene extends Scene {
     }
     State.save();
 
-    this.game.scenes.replace('Results', {
+    this.pending = {
       result: r,
       tickets,
       multiplier: mult,
       leveledTo: award.leveledTo,
       booth: this.booth,
-    });
+    };
+
+    // A short on-canvas celebration (confetti + shake + fanfare) before results.
+    if (award.leveledTo || r.bigWin || r.won) {
+      this.celebrating = true;
+      this.celebrateT = award.leveledTo ? 1.6 : 1.2;
+      this.banner = award.leveledTo ? `⭐ LEVEL ${award.leveledTo}!` : (r.bigWin ? 'PERFECT! 🎉' : 'NICE! 🎉');
+      this.fx.confetti(this.view.w, award.leveledTo ? 130 : 90);
+      this.game.addShake(award.leveledTo ? 10 : 7, 0.4);
+      if (award.leveledTo || r.bigWin) Audio.fanfare();
+      else Audio.win();
+    } else {
+      this._goResults();
+    }
+  }
+
+  _goResults() {
+    this.game.scenes.replace('Results', this.pending);
   }
 
   render(ctx, alpha) {
     if (this.instance) this.instance.render(ctx, alpha);
+    if (this.celebrating) {
+      this.fx.render(ctx);
+      ctx.save();
+      ctx.font = 'bold 40px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.strokeText(this.banner, this.view.w / 2, this.view.h * 0.32);
+      ctx.fillStyle = '#ffd14d';
+      ctx.fillText(this.banner, this.view.w / 2, this.view.h * 0.32);
+      ctx.restore();
+    }
   }
 
   onExit() {

@@ -40,7 +40,7 @@ export function defaultState() {
       inventory: {},
     },
     stats: {
-      best: { rings: 0, bottles: 0, darts: 0 },
+      best: { rings: 0, bottles: 0, darts: 0, striker: 0 },
     },
   };
 }

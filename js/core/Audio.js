@@ -54,6 +54,34 @@ class AudioEngine {
   fail() {
     this._tone(160, 180, 'sawtooth', 0.05);
   }
+  // Ascending arpeggio for a big win / level up.
+  fanfare() {
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((f, i) => setTimeout(() => this._tone(f, 160, 'square', 0.06), i * 110));
+  }
+  // Rising "wheee" as a ride spins up.
+  spinUp() {
+    const notes = [330, 392, 494, 587, 698];
+    notes.forEach((f, i) => setTimeout(() => this._tone(f, 90, 'triangle', 0.04), i * 80));
+  }
+  // Airy descending swoosh when flung off a ride.
+  whoosh() {
+    this._tone(740, 220, 'sawtooth', 0.05);
+    setTimeout(() => this._tone(420, 200, 'sawtooth', 0.04), 80);
+  }
+  // Low thud on landing.
+  thud() {
+    this._tone(120, 160, 'square', 0.07);
+  }
+  // Wet "splat" for a food-stall eruption.
+  splat() {
+    this._tone(200, 120, 'sawtooth', 0.06);
+    setTimeout(() => this._tone(140, 120, 'square', 0.05), 50);
+  }
+  // Short high pop.
+  pop() {
+    this._tone(880, 60, 'triangle', 0.05);
+  }
 }
 
 export const Audio = new AudioEngine();

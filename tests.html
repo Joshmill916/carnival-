@@ -31,6 +31,7 @@
     const { migrate } = await import('./js/data/schema.js');
     const { makeRng } = await import('./js/core/util.js');
     const { RingToss } = await import('./js/games/RingToss.js');
+    const { HighStriker } = await import('./js/games/HighStriker.js');
 
     grp('Persistence — migrate carries tickets, drops old economy');
     const m = migrate({ version: 1, economy: { tickets: 42, coins: 5 }, stats: { plays: 7 } });
@@ -65,6 +66,20 @@
     };
     ok(JSON.stringify(runRing(42)) === JSON.stringify(runRing(42)), 'same seed + input → identical result');
     ok(runRing(42).attempts === 3, 'ring toss uses all 3 rings');
+
+    grp('High Striker — full-power swipes ring the bell');
+    const runStriker = (seed) => {
+      const g = new HighStriker({ w: 400, h: 700 }, makeRng(seed));
+      g.init();
+      let guard = 0;
+      while (!g.isDone() && guard++ < 5000) {
+        if (g.phase === 'aim') { let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-3000,speed:3000}) }); }
+        g.update(1/60);
+      }
+      return g.getResult();
+    };
+    ok(runStriker(7).score === 30 && runStriker(7).bigWin, 'max-power swings ring the bell: 30 + bigWin');
+    ok(runStriker(7).attempts === 3, 'high striker uses all 3 swings');
 
     State.reset();
     const sum = document.getElementById('summary');
