@@ -1,0 +1,44 @@
+# Publishes the game to GitHub Pages (a real HTTPS URL) on every push.
+# This is a static site with no build step, so we just upload the repo as-is.
+#
+# ONE-TIME SETUP (in the repo on github.com):
+#   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+# After that, every push here re-deploys automatically and prints the live URL
+# in the Actions run summary.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - claude/visibility-check-f1kw6b
+  workflow_dispatch: # lets you trigger a deploy by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; newer pushes supersede in-progress runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: . # repo root: index.html, css/, js/, sw.js, manifest, assets/
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
