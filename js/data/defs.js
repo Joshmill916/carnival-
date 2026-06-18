@@ -38,6 +38,16 @@ export const BOOTHS = [
     color: '#5b8cff',
     emoji: '🎈',
   },
+  {
+    id: 'striker',
+    name: 'High Striker',
+    game: 'striker',
+    minLevel: 1,
+    x: 700,
+    y: 430,
+    color: '#ff8f4d',
+    emoji: '🔨',
+  },
 ];
 
 // --- Rides (decorative landmarks, animated) ----------------------------------

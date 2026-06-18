@@ -19,7 +19,14 @@ progress locally — no account, no server, nothing uploaded.
     2 balls; clear them all for a bonus.
   - 🎈 **Balloon Darts** — tap a balloon to throw a dart. 5 darts; brighter
     balloons are worth more.
-- **Win 🎟️ tickets** from every game.
+  - 🔨 **High Striker** — swipe up *hard* to send the puck up the strongman
+    tower. Ring the bell at the top for the max score. 3 swings.
+- **Win 🎟️ tickets** from every game — every win bursts into confetti, a
+  fanfare and a screen shake.
+- **Mess around the fair:** walk onto a **ride** (Ferris wheel or carousel) and
+  it grabs you, spins faster and faster, then flings you off tumbling through
+  the air to land dizzy with stars spinning round your head. Bump into a **food
+  stall** and it erupts like a volcano, spraying its food everywhere.
 
 ## Progression (play → level up → collect prizes)
 
@@ -60,7 +67,7 @@ js/core/    engine: loop, scene manager, renderer/camera, input, storage, audio
 js/data/    save schema + migration, shared state, content definitions
 js/systems/ progression (tickets + levels), prizes (redeem + trade up), store
 js/scenes/  boot, map, booth prompt, mini-game host, results, store, prizes, settings
-js/games/   mini-game base + ring toss / bottle knockdown / balloon darts
+js/games/   mini-game base + ring toss / bottle knockdown / balloon darts / high striker
 js/ui/      HUD, modal helper, procedural sprites, particles
 ```
 

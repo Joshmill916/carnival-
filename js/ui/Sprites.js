@@ -365,6 +365,22 @@ export function drawAvatar(ctx, x, y, facing, walkPhase) {
   }
 }
 
+// Spinning stars that circle a dizzy head after being flung off a ride.
+export function drawDizzyStars(ctx, x, y, t) {
+  ctx.save();
+  ctx.font = '14px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < 3; i++) {
+    const a = t * 7 + (Math.PI * 2 * i) / 3;
+    const sx = x + Math.cos(a) * 15;
+    const sy = y + Math.sin(a) * 6;
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 8 + i);
+    ctx.fillText('💫', sx, sy);
+  }
+  ctx.restore();
+}
+
 // --- Mini-game pieces (unchanged gameplay shapes, lightly polished) ----------
 export function drawRing(ctx, x, y, z, r = 16) {
   const scale = 1 + z / 200;

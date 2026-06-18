@@ -32,10 +32,23 @@ export class Game {
     this.hud.hide();
 
     this._registerScenes();
+    // Screen-shake state, applied around every scene render.
+    this.shakeT = 0;
+    this.shakeDur = 0;
+    this.shakeMag = 0;
     this.loop = new Loop(
       (dt) => this._update(dt),
       (alpha) => this._render(alpha)
     );
+  }
+
+  // Kick a screen shake: peak pixel offset `mag`, easing out over `dur` seconds.
+  addShake(mag, dur = 0.3) {
+    if (mag > this.shakeMag || this.shakeT <= 0) {
+      this.shakeMag = mag;
+      this.shakeDur = dur;
+      this.shakeT = dur;
+    }
   }
 
   _registerScenes() {
@@ -56,11 +69,22 @@ export class Game {
 
   _update(dt) {
     this.input.sample();
+    if (this.shakeT > 0) this.shakeT -= dt;
     this.scenes.update(dt);
   }
   _render(alpha) {
     this.renderer.clear('#0e1630');
-    this.scenes.render(this.renderer.ctx, alpha);
+    const ctx = this.renderer.ctx;
+    let ox = 0, oy = 0;
+    if (this.shakeT > 0) {
+      const i = this.shakeMag * (this.shakeT / this.shakeDur);
+      ox = (Math.random() * 2 - 1) * i;
+      oy = (Math.random() * 2 - 1) * i;
+    }
+    ctx.save();
+    ctx.translate(ox, oy);
+    this.scenes.render(ctx, alpha);
+    ctx.restore();
   }
 
   // --- Navigation helpers used by scenes -------------------------------------

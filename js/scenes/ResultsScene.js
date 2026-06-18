@@ -10,7 +10,7 @@ export class ResultsScene extends Scene {
     this.booth = booth;
     this.game.hud.show();
     this.game.input.setMode('none');
-    if (leveledTo) Audio.win();
+    if (leveledTo) Audio.fanfare();
     else if (result.won) Audio.win();
     else Audio.fail();
 
