@@ -32,8 +32,12 @@ A PWA installs from the home screen on both platforms when served over **HTTPS**
 ## Updating the app
 
 When you change any shell file, bump `CACHE_VERSION` in `sw.js` (e.g.
-`carnival-v2`) so installed players get the new build on their next online load.
-Save data lives in `localStorage` and is never touched by the service worker.
+`carnival-v2`). Updates **apply automatically**: on the next online visit the
+new service worker installs, takes control, and the page reloads itself once
+onto the fresh build — no manual cache-clearing. (See the registration block in
+`js/main.js`, which reloads on `controllerchange` and re-checks for new builds
+on focus.) Save data lives in `localStorage` and is never touched by the
+service worker, so it survives the reload.
 
 ## Player data & privacy
 

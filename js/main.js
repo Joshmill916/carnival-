@@ -25,8 +25,24 @@ window.addEventListener('pagehide', () => State.flush());
 
 // Register the offline service worker (only over http/https, not file://).
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  // A worker already controlling the page at load means any later
+  // controllerchange is a NEW build taking over — reload once to run it.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded || !hadController) return; // skip the first-install claim
+    reloaded = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      reg.update().catch(() => {});
+      // Re-check for a new build hourly and whenever the app regains focus.
+      setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
   });
 }
 
