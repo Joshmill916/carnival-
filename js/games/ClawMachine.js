@@ -1,5 +1,5 @@
-// Claw Machine: top-down joystick-steered claw. Steer with the floating stick,
-// tap DROP to descend. 5 attempts; grab prizes from a bin of 16–20 items.
+// Claw Machine: side-view glass cabinet. Steer the claw left/right with the
+// floating joystick, tap DROP to descend. 5 attempts; grab from 16–20 prizes.
 import { MiniGame } from './MiniGame.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
@@ -36,9 +36,9 @@ export class ClawMachine extends MiniGame {
   init() {
     const W = this.view.w, H = this.view.h;
     this.attemptsLeft = DROPS;
-    this.hint = 'Steer with the stick, tap DROP';
+    this.hint = 'Steer left/right, tap DROP';
 
-    // DROP button sits below the bin. Leave 36 px below it for the hint text.
+    // DROP button at the bottom, leaving room for the hint text.
     const btnW = 130, btnH = 58;
     this.dropBtn = {
       x: W / 2 - btnW / 2,
@@ -47,39 +47,55 @@ export class ClawMachine extends MiniGame {
       h: btnH,
     };
 
-    // Bin fills the space above the button.
-    const binPad = 14;
-    this.bin = {
-      x: binPad,
-      y: 84,
-      w: W - binPad * 2,
-      h: this.dropBtn.y - 84 - 8,
+    // Outer cabinet frame (silver/chrome surround).
+    const cabPad = 10;
+    this.cab = {
+      x: cabPad,
+      y: 46,
+      w: W - cabPad * 2,
+      h: this.dropBtn.y - 46 - 8,
     };
 
-    // Claw starts at the center of the bin.
-    this.clawX = this.bin.x + this.bin.w / 2;
-    this.clawZ = this.bin.y + this.bin.h / 2;
+    // Top mechanism section (dark, houses the rail).
+    const topH = Math.round(this.cab.h * 0.17);
+    this.railY = this.cab.y + topH - 6;
 
-    // Claw state machine: 'idle' | 'dropping' | 'grabbing' | 'lifting'
+    // Glass prize area (everything below the rail).
+    this.prizeArea = {
+      x: this.cab.x + 5,
+      y: this.cab.y + topH,
+      w: this.cab.w - 10,
+      h: this.cab.h - topH,
+    };
+
+    // Claw Y travel: starts just below the rail, drops near the floor.
+    this.clawTopY = this.railY + 2;
+    this.clawBottomY = this.prizeArea.y + this.prizeArea.h - 44;
+
+    // Claw starts at the horizontal centre.
+    this.clawX = this.cab.x + this.cab.w / 2;
+    const clawMinX = this.cab.x + 22;
+    const clawMaxX = this.cab.x + this.cab.w - 22;
+    this._clawMinX = clawMinX;
+    this._clawMaxX = clawMaxX;
+
+    // Phase state machine: 'idle' | 'dropping' | 'grabbing' | 'lifting'
     this.clawPhase = 'idle';
     this.clawT = 0;
-    this.dropProgress = 0; // 0 = high up, 1 = at floor
+    this.dropProgress = 0; // 0 = top, 1 = bottom
     this.heldPrize = null;
 
-    // Steering vector set each frame by handleInput and consumed in update.
     this._steerX = 0;
-    this._steerY = 0;
-
-    // Floating joystick visuals.
-    this._joyBase = null;   // { x, y } or null
+    this._joyBase = null;
     this._joyKnob = { x: 0, y: 0 };
-
-    // Drag tracking: did this drag start on the DROP button?
     this._dragOnBtn = false;
     this._wasDragging = false;
-
-    // Drop-key debounce (space / enter).
     this._dropKeyWasDown = false;
+
+    // Slip animation: prize briefly rises with the claw then falls back.
+    this._slipPrize = null; // { emoji, x, startY }
+    this._slipT = 0;
+    this._slipDur = 0.75;
 
     this._scatterPrizes();
   }
@@ -89,9 +105,9 @@ export class ClawMachine extends MiniGame {
     for (const p of PRIZE_POOL) {
       for (let i = 0; i < p.w; i++) pool.push(p);
     }
-    const count = 16 + Math.floor(this.rng() * 5); // 16–20
-    const margin = 30;
-    const b = this.bin;
+    const count = 16 + Math.floor(this.rng() * 5);
+    const pa = this.prizeArea;
+    const mX = 22, mTop = 16, mBot = 22;
     this.prizes = [];
     for (let i = 0; i < count; i++) {
       const tmpl = pool[Math.floor(this.rng() * pool.length)];
@@ -100,27 +116,25 @@ export class ClawMachine extends MiniGame {
         color: tmpl.color,
         pts: tmpl.pts,
         diff: tmpl.diff,
-        x: b.x + margin + this.rng() * (b.w - margin * 2),
-        z: b.y + margin + this.rng() * (b.h - margin * 2),
+        x: pa.x + mX + this.rng() * (pa.w - mX * 2),
+        y: pa.y + mTop + this.rng() * (pa.h - mTop - mBot),
+        depth: this.rng(), // 0 = front, 1 = back
         grabbed: false,
       });
     }
-    // Larger z = closer to the viewer (bottom of bin). Sort ascending so nearer
-    // prizes are drawn last (on top) for fake depth.
-    this.prizes.sort((a, b2) => a.z - b2.z);
+    // Back prizes drawn first so front prizes render on top.
+    this.prizes.sort((a, b) => b.depth - a.depth);
   }
 
   handleInput(input) {
     if (this.done) return;
 
-    // Reset steering every frame; only set it when input is active.
     this._steerX = 0;
-    this._steerY = 0;
 
     const drag = input.drag;
     const drop = this.dropBtn;
 
-    // --- Floating joystick from drag state ---
+    // --- Floating joystick (drag that didn't start on the DROP button) ---
     if (drag.active) {
       if (!this._wasDragging) {
         this._wasDragging = true;
@@ -130,22 +144,21 @@ export class ClawMachine extends MiniGame {
         this._joyBase = this._dragOnBtn ? null : { x: drag.startX, y: drag.startY };
       }
       if (!this._dragOnBtn && this._joyBase) {
-        // Normalize to JOY_RADIUS, clamp magnitude to 1, apply deadzone.
+        // Normalize X component to JOY_RADIUS, clamp, apply deadzone.
         let dx = (drag.x - drag.startX) / JOY_RADIUS;
-        let dy = (drag.y - drag.startY) / JOY_RADIUS;
+        const dy = (drag.y - drag.startY) / JOY_RADIUS;
         const mag = Math.hypot(dx, dy);
-        if (mag > 1) { dx /= mag; dy /= mag; }
-        if (Math.hypot(dx, dy) < JOY_DEADZONE) { dx = dy = 0; }
-        this._steerX = dx;
-        this._steerY = dy;
+        if (mag > 1) dx /= mag;
+        if (Math.abs(dx) < JOY_DEADZONE) dx = 0;
+        this._steerX = clamp(dx, -1, 1);
 
-        // Knob visual position (clamped to JOY_RADIUS).
+        // Knob visual (full 2-D, clamped to JOY_RADIUS).
         const rawMag = Math.hypot(drag.x - drag.startX, drag.y - drag.startY);
-        const clampedMag = Math.min(rawMag, JOY_RADIUS);
+        const cMag = Math.min(rawMag, JOY_RADIUS);
         const angle = rawMag > 0 ? Math.atan2(drag.y - drag.startY, drag.x - drag.startX) : 0;
         this._joyKnob = {
-          x: this._joyBase.x + Math.cos(angle) * clampedMag,
-          y: this._joyBase.y + Math.sin(angle) * clampedMag,
+          x: this._joyBase.x + Math.cos(angle) * cMag,
+          y: this._joyBase.y + Math.sin(angle) * cMag,
         };
       }
     } else {
@@ -156,20 +169,11 @@ export class ClawMachine extends MiniGame {
       }
     }
 
-    // --- Keyboard steering (overrides joystick when held) ---
-    let kx = 0, ky = 0;
-    if (input.keys.has('arrowleft') || input.keys.has('a')) kx -= 1;
-    if (input.keys.has('arrowright') || input.keys.has('d')) kx += 1;
-    if (input.keys.has('arrowup') || input.keys.has('w')) ky -= 1;
-    if (input.keys.has('arrowdown') || input.keys.has('s')) ky += 1;
-    const kmag = Math.hypot(kx, ky);
-    if (kmag > 0) {
-      if (kmag > 1) { kx /= kmag; ky /= kmag; }
-      this._steerX = kx;
-      this._steerY = ky;
-    }
+    // --- Keyboard steering ---
+    if (input.keys.has('arrowleft') || input.keys.has('a')) this._steerX = -1;
+    if (input.keys.has('arrowright') || input.keys.has('d')) this._steerX = 1;
 
-    // --- Tap on DROP button triggers a drop ---
+    // --- Tap DROP button ---
     const g = input.consumeGesture();
     if (g && g.type === 'tap' && this.clawPhase === 'idle') {
       const inDrop =
@@ -180,9 +184,7 @@ export class ClawMachine extends MiniGame {
 
     // --- Keyboard drop (space / enter) ---
     const dropKey = input.keys.has(' ') || input.keys.has('enter');
-    if (dropKey && !this._dropKeyWasDown && this.clawPhase === 'idle') {
-      this._startDrop();
-    }
+    if (dropKey && !this._dropKeyWasDown && this.clawPhase === 'idle') this._startDrop();
     this._dropKeyWasDown = dropKey;
   }
 
@@ -198,11 +200,18 @@ export class ClawMachine extends MiniGame {
   update(dt) {
     super.update(dt);
 
-    // Steer the claw horizontally only while idle.
+    // Move claw horizontally only while idle.
     if (this.clawPhase === 'idle') {
-      const b = this.bin;
-      this.clawX = clamp(this.clawX + this._steerX * CLAW_SPEED * dt, b.x + 6, b.x + b.w - 6);
-      this.clawZ = clamp(this.clawZ + this._steerY * CLAW_SPEED * dt, b.y + 6, b.y + b.h - 6);
+      this.clawX = clamp(
+        this.clawX + this._steerX * CLAW_SPEED * dt,
+        this._clawMinX, this._clawMaxX,
+      );
+    }
+
+    // Slip animation runs independently of the claw phase.
+    if (this._slipPrize) {
+      this._slipT += dt;
+      if (this._slipT >= this._slipDur) this._slipPrize = null;
     }
 
     this.clawT += dt;
@@ -221,17 +230,16 @@ export class ClawMachine extends MiniGame {
       }
     } else if (this.clawPhase === 'lifting') {
       this.dropProgress = Math.max(1 - this.clawT / LIFT_TIME, 0);
-      if (this.clawT >= LIFT_TIME) {
-        this._finishAttempt();
-      }
+      if (this.clawT >= LIFT_TIME) this._finishAttempt();
     }
   }
 
   _tryGrab() {
+    // Side-view: grab is based on horizontal proximity at the floor.
     let best = null, bestD = Infinity;
     for (const p of this.prizes) {
       if (p.grabbed) continue;
-      const d = Math.hypot(p.x - this.clawX, p.z - this.clawZ);
+      const d = Math.abs(p.x - this.clawX);
       if (d < GRAB_R && d < bestD) { best = p; bestD = d; }
     }
     if (best) {
@@ -243,6 +251,9 @@ export class ClawMachine extends MiniGame {
         Audio.hit();
         return;
       }
+      // Near-miss: prize slips out — animate it rising then falling.
+      this._slipPrize = { emoji: best.emoji, x: best.x, startY: this.clawBottomY };
+      this._slipT = 0;
     }
     Audio.fail();
   }
@@ -252,8 +263,8 @@ export class ClawMachine extends MiniGame {
       const pts = this.heldPrize.pts;
       this.score += pts;
       this.hits++;
-      this.particles.burst(this.clawX, this.clawZ, this.heldPrize.color, 14);
-      this.particles.text(this.clawX, this.clawZ - 32, `+${pts}`, this.heldPrize.color, 22);
+      this.particles.burst(this.clawX, this.clawTopY + 20, this.heldPrize.color, 14);
+      this.particles.text(this.clawX, this.clawTopY, `+${pts}`, this.heldPrize.color, 22);
       if (pts >= 9) Audio.win(); else Audio.hit();
       this.heldPrize = null;
     }
@@ -274,124 +285,249 @@ export class ClawMachine extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    const b = this.bin;
+    const cab = this.cab;
+    const pa = this.prizeArea;
 
     // Background.
-    ctx.fillStyle = '#1a1030';
+    ctx.fillStyle = '#0e0c1e';
     ctx.fillRect(0, 0, W, H);
 
-    // Marquee above the bin.
-    const mqH = 28;
+    // Marquee sign above cabinet.
     ctx.fillStyle = '#b07cff';
     ctx.beginPath();
-    ctx.roundRect(b.x, b.y - mqH - 2, b.w, mqH, 6);
+    ctx.roundRect(cab.x, 8, cab.w, 32, 6);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('★ CLAW MACHINE ★', b.x + b.w / 2, b.y - mqH / 2 - 2);
+    ctx.fillText('★ CLAW MACHINE ★', W / 2, 24);
 
-    // Bin outer wall.
-    ctx.fillStyle = '#0d2040';
-    ctx.strokeStyle = '#5b8cff';
-    ctx.lineWidth = 4;
+    // Outer silver/chrome frame.
+    const grad = ctx.createLinearGradient(cab.x, 0, cab.x + cab.w, 0);
+    grad.addColorStop(0, '#b0b8cc');
+    grad.addColorStop(0.05, '#dde3f0');
+    grad.addColorStop(0.95, '#dde3f0');
+    grad.addColorStop(1, '#8890a4');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#7880a0';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(b.x, b.y, b.w, b.h, 10);
+    ctx.roundRect(cab.x, cab.y, cab.w, cab.h, 8);
     ctx.fill();
     ctx.stroke();
 
-    // Bin inner floor.
-    ctx.fillStyle = '#111c34';
+    // Top mechanism section (dark interior).
+    ctx.fillStyle = '#12203a';
     ctx.beginPath();
-    ctx.roundRect(b.x + 6, b.y + 6, b.w - 12, b.h - 12, 7);
+    ctx.roundRect(cab.x + 5, cab.y + 4, cab.w - 10, pa.y - cab.y - 2, 5);
     ctx.fill();
 
-    // Subtle grid for depth cue.
-    ctx.strokeStyle = 'rgba(91,140,255,0.07)';
-    ctx.lineWidth = 1;
-    const rows = 5;
-    for (let i = 1; i < rows; i++) {
-      const rowY = b.y + 6 + ((b.h - 12) / rows) * i;
-      ctx.beginPath();
-      ctx.moveTo(b.x + 6, rowY);
-      ctx.lineTo(b.x + b.w - 6, rowY);
-      ctx.stroke();
-    }
+    // LED strip along bottom of mechanism section.
+    ctx.fillStyle = '#3355ff';
+    ctx.fillRect(cab.x + 8, pa.y - 5, cab.w - 16, 3);
 
-    // Drop shadow — shows where the claw will land. Shrinks as claw descends.
-    const shadowR = 22 + (1 - this.dropProgress) * 12;
+    // Horizontal rail bar.
+    const railGrad = ctx.createLinearGradient(0, this.railY, 0, this.railY + 9);
+    railGrad.addColorStop(0, '#dde3f0');
+    railGrad.addColorStop(0.4, '#9aa3b2');
+    railGrad.addColorStop(1, '#6670a0');
+    ctx.fillStyle = railGrad;
+    ctx.beginPath();
+    ctx.roundRect(cab.x + 8, this.railY, cab.w - 16, 9, 3);
+    ctx.fill();
+
+    // Glass prize area — blue-tinted window.
+    ctx.fillStyle = 'rgba(18, 40, 90, 0.92)';
+    ctx.strokeStyle = '#3355aa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(pa.x, pa.y, pa.w, pa.h, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // Glass shine (left edge reflection).
     ctx.save();
-    ctx.globalAlpha = 0.22 + this.dropProgress * 0.18;
-    ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.ellipse(this.clawX, this.clawZ, shadowR, shadowR * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.roundRect(pa.x, pa.y, pa.w, pa.h, 4);
+    ctx.clip();
+    const shineGrad = ctx.createLinearGradient(pa.x, 0, pa.x + pa.w * 0.18, 0);
+    shineGrad.addColorStop(0, 'rgba(255,255,255,0.10)');
+    shineGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = shineGrad;
+    ctx.fillRect(pa.x, pa.y, pa.w * 0.18, pa.h);
     ctx.restore();
 
-    // Prizes (sorted by z ascending; nearer/larger-z drawn last = on top).
+    // Aim guide: faint vertical line showing where claw will land.
+    if (this.clawPhase === 'idle') {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,220,80,0.18)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(this.clawX, this.clawTopY + 16);
+      ctx.lineTo(this.clawX, this.clawBottomY + 30);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Prizes (back-to-front).
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const p of this.prizes) {
       if (p.grabbed && p !== this.heldPrize) continue;
-      if (p === this.heldPrize) continue; // drawn with claw below
-      const depth = (p.z - b.y) / b.h;
-      const sz = Math.round(16 + depth * 8); // nearer prizes slightly larger
+      if (p === this.heldPrize) continue;
+      const front = 1 - p.depth; // 0=back, 1=front
+      const sz = Math.round(14 + front * 10);
       ctx.save();
-      ctx.globalAlpha = 0.65 + depth * 0.35;
+      ctx.globalAlpha = 0.45 + front * 0.55;
       ctx.font = `${sz}px serif`;
-      ctx.fillText(p.emoji, p.x, p.z);
+      ctx.fillText(p.emoji, p.x, p.y);
       ctx.restore();
     }
 
-    // Claw and (optionally) held prize.
+    // Slipped prize: rises briefly then falls back into the bin.
+    if (this._slipPrize) {
+      const t = this._slipT, dur = this._slipDur;
+      const sp = this._slipPrize;
+      const peakY = sp.startY - 55;
+      const endY = sp.startY + 30;
+      const pivot = dur * 0.32;
+      let sy;
+      if (t < pivot) {
+        sy = sp.startY + (peakY - sp.startY) * (t / pivot);
+      } else {
+        const fall = (t - pivot) / (dur - pivot);
+        sy = peakY + (endY - peakY) * fall * fall;
+      }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - t / dur);
+      ctx.font = '22px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(sp.emoji, sp.x, sy);
+      ctx.restore();
+    }
+
+    // Claw (cable + rail block + head + held prize).
     this._drawClaw(ctx);
+
+    // Cabinet frame corners / bolts for realism.
+    this._drawFrameDetails(ctx);
 
     // DROP button.
     this._drawDropBtn(ctx);
 
-    // Floating joystick (only when finger is down and not on the button).
+    // Floating joystick.
     this._drawJoystick(ctx);
 
     this.particles.render(ctx);
     this._drawHud(ctx);
   }
 
+  _clawHeadY() {
+    return this.clawTopY + this.dropProgress * (this.clawBottomY - this.clawTopY);
+  }
+
   _drawClaw(ctx) {
-    const x = this.clawX, z = this.clawZ;
+    const cx = this.clawX;
+    const headY = this._clawHeadY();
     const isOpen = this.clawPhase === 'idle' || this.clawPhase === 'dropping';
-    // Hub grows slightly as the claw descends (fake 3-D depth).
-    const hub = 10 + this.dropProgress * 7;
-    const prong = hub + (isOpen ? 14 : 5);
 
     ctx.save();
-    ctx.strokeStyle = '#ccd0da';
-    ctx.lineWidth = 3;
-    // Three prongs at 120° angles (top prong points up).
-    for (let i = 0; i < 3; i++) {
-      const angle = (i * Math.PI * 2) / 3 - Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * hub * 0.55, z + Math.sin(angle) * hub * 0.55);
-      ctx.lineTo(x + Math.cos(angle) * prong, z + Math.sin(angle) * prong);
-      ctx.stroke();
-    }
-    // Central hub.
-    ctx.fillStyle = '#9aa3b2';
+
+    // Rail sliding block.
+    ctx.fillStyle = '#6670a0';
+    ctx.strokeStyle = '#aab4cc';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(x, z, hub, 0, Math.PI * 2);
+    ctx.roundRect(cx - 13, this.railY - 1, 26, 13, 3);
     ctx.fill();
-    ctx.strokeStyle = '#e0e4f0';
+    ctx.stroke();
+
+    // Cable (solid line from block down to hub).
+    ctx.strokeStyle = '#c8cee0';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, this.railY + 12);
+    ctx.lineTo(cx, headY);
+    ctx.stroke();
+
+    // Claw hub.
+    const hubR = 9;
+    ctx.fillStyle = '#8893a7';
+    ctx.beginPath();
+    ctx.arc(cx, headY, hubR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#dde3f0';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Held prize floats below the claw prongs.
+    // Three prongs hanging down (front view).
+    const spread = isOpen ? 20 : 5;
+    const prongLen = 26;
+    ctx.strokeStyle = '#dde3f0';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+
+    // Left prong — curves outward then hooks inward.
+    ctx.beginPath();
+    ctx.moveTo(cx - hubR * 0.5, headY + hubR);
+    ctx.bezierCurveTo(
+      cx - spread, headY + hubR + prongLen * 0.5,
+      cx - spread * 0.8, headY + hubR + prongLen * 0.85,
+      cx - spread * 0.4, headY + hubR + prongLen,
+    );
+    ctx.stroke();
+
+    // Centre prong — straight down.
+    ctx.beginPath();
+    ctx.moveTo(cx, headY + hubR);
+    ctx.lineTo(cx, headY + hubR + prongLen);
+    ctx.stroke();
+
+    // Right prong — mirrors left.
+    ctx.beginPath();
+    ctx.moveTo(cx + hubR * 0.5, headY + hubR);
+    ctx.bezierCurveTo(
+      cx + spread, headY + hubR + prongLen * 0.5,
+      cx + spread * 0.8, headY + hubR + prongLen * 0.85,
+      cx + spread * 0.4, headY + hubR + prongLen,
+    );
+    ctx.stroke();
+
+    ctx.lineCap = 'butt';
+
+    // Held prize dangles below the claw.
     if (this.heldPrize) {
-      ctx.font = '22px serif';
+      ctx.font = '24px serif';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(this.heldPrize.emoji, x, z + prong + 14);
+      ctx.textBaseline = 'top';
+      ctx.fillText(this.heldPrize.emoji, cx, headY + hubR + prongLen + 4);
     }
+
     ctx.restore();
+  }
+
+  _drawFrameDetails(ctx) {
+    const cab = this.cab;
+    // Corner bolt dots for a machine-panel look.
+    const bolts = [
+      [cab.x + 10, cab.y + 10],
+      [cab.x + cab.w - 10, cab.y + 10],
+      [cab.x + 10, cab.y + cab.h - 10],
+      [cab.x + cab.w - 10, cab.y + cab.h - 10],
+    ];
+    ctx.fillStyle = '#7880a0';
+    for (const [bx, by] of bolts) {
+      ctx.beginPath();
+      ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Bottom trim strip.
+    ctx.fillStyle = '#5b8cff';
+    ctx.fillRect(cab.x + 5, cab.y + cab.h - 6, cab.w - 10, 4);
   }
 
   _drawDropBtn(ctx) {
