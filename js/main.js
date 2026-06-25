@@ -30,7 +30,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded || !hadController) return; // skip the first-install claim
+    if (reloaded || !hadController || navigator.standalone) return;
     reloaded = true;
     window.location.reload();
   });
