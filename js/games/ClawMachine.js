@@ -68,9 +68,9 @@ export class ClawMachine extends MiniGame {
       h: this.cab.h - topH,
     };
 
-    // Claw Y travel: starts just below the rail, drops near the floor.
+    // Claw Y travel: starts just below the rail, drops to the prize floor.
     this.clawTopY = this.railY + 2;
-    this.clawBottomY = this.prizeArea.y + this.prizeArea.h - 44;
+    this.clawBottomY = this.prizeArea.y + this.prizeArea.h - 28;
 
     // Claw starts at the horizontal centre.
     this.clawX = this.cab.x + this.cab.w / 2;
@@ -107,23 +107,31 @@ export class ClawMachine extends MiniGame {
     }
     const count = 16 + Math.floor(this.rng() * 5);
     const pa = this.prizeArea;
-    const mX = 22, mTop = 16, mBot = 22;
+    const mX = 18;
+    // Pile at the bottom: floor is the very bottom of the glass area.
+    const floor = pa.y + pa.h - 14;
+    const pileH = pa.h * 0.42; // pile fills the bottom 42 % of the cabinet
+
     this.prizes = [];
     for (let i = 0; i < count; i++) {
       const tmpl = pool[Math.floor(this.rng() * pool.length)];
+      const x = pa.x + mX + this.rng() * (pa.w - mX * 2);
+      // Squared distribution: most prizes sit near the floor, a few on top.
+      const t = this.rng();
+      const y = floor - t * t * pileH;
       this.prizes.push({
         emoji: tmpl.emoji,
         color: tmpl.color,
         pts: tmpl.pts,
         diff: tmpl.diff,
-        x: pa.x + mX + this.rng() * (pa.w - mX * 2),
-        y: pa.y + mTop + this.rng() * (pa.h - mTop - mBot),
-        depth: this.rng(), // 0 = front, 1 = back
+        x,
+        y,
         grabbed: false,
       });
     }
-    // Back prizes drawn first so front prizes render on top.
-    this.prizes.sort((a, b) => b.depth - a.depth);
+    // Draw from back of pile to front: higher-Y prizes (floor level) drawn first,
+    // lower-Y prizes (top of pile) drawn on top.
+    this.prizes.sort((a, b) => b.y - a.y);
   }
 
   handleInput(input) {
@@ -372,19 +380,14 @@ export class ClawMachine extends MiniGame {
       ctx.restore();
     }
 
-    // Prizes (back-to-front).
+    // Prizes piled at the bottom (sorted back-to-front by Y).
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.font = '22px serif';
     for (const p of this.prizes) {
       if (p.grabbed && p !== this.heldPrize) continue;
       if (p === this.heldPrize) continue;
-      const front = 1 - p.depth; // 0=back, 1=front
-      const sz = Math.round(14 + front * 10);
-      ctx.save();
-      ctx.globalAlpha = 0.45 + front * 0.55;
-      ctx.font = `${sz}px serif`;
       ctx.fillText(p.emoji, p.x, p.y);
-      ctx.restore();
     }
 
     // Slipped prize: rises briefly then falls back into the bin.

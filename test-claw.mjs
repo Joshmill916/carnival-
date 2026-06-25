@@ -173,8 +173,9 @@ console.log('\nSlip animation tests');
   }
 
   // Either a grab succeeded or a slip animation started — both are valid outcomes.
+  // hits is incremented only after lifting completes; check heldPrize for an in-progress grab.
   const hadSlip = g._slipPrize !== null;
-  const hadGrab = g.hits > 0;
+  const hadGrab = g.heldPrize !== null;
   ok(hadSlip || hadGrab, 'edge-of-reach drop either grabs or triggers slip animation');
 }
 
