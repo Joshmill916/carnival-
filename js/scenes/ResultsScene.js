@@ -17,13 +17,14 @@ export class ResultsScene extends Scene {
     const title = result.won ? '🎉 Nice round!' : 'Better luck next time';
     this.modal = createModal({ title });
     const multTxt = multiplier > 1 ? ` <span class="muted">(×${multiplier} level bonus)</span>` : '';
+    const banner = result.bigWin ? 'BIG WIN!' : (result.won ? 'YOU WON' : '');
     const levelTxt = leveledTo
       ? `<p class="win">⭐ LEVEL UP! You reached Level ${leveledTo}<br><span class="muted">${levelDef(leveledTo).unlock}</span></p>`
       : '';
     this.modal.body.innerHTML = `
-      <p class="big">Score: <b>${result.score}</b></p>
-      <p class="big">🎟️ Tickets won: <b>${tickets}</b>${multTxt}</p>
-      ${result.bigWin ? `<p class="win">PERFECT CLEAR! Bonus tickets included 🎉</p>` : ''}
+      ${banner ? `<p class="result-banner">${banner}</p>` : ''}
+      <p class="result-score">${result.score}</p>
+      <p class="result-tickets">🎟️ ${tickets} tickets${multTxt}</p>
       ${levelTxt}
     `;
     this.modal.addButton('Play again', () => this.game.playBooth(booth), 'primary');

@@ -1,6 +1,7 @@
 // Bottle Knockdown: swipe up to throw a baseball at a stacked pyramid of bottles.
 // Knocked bottles cascade into each other. 2 balls; clear them all for a coin bonus.
 import { MiniGame } from './MiniGame.js';
+import { drawSpace } from '../ui/Backdrop.js';
 import { drawBottle, drawBall } from '../ui/Sprites.js';
 import { circleHit } from '../core/util.js';
 import { Audio } from '../core/Audio.js';
@@ -152,8 +153,7 @@ export class BottleKnockdown extends MiniGame {
   }
 
   render(ctx) {
-    ctx.fillStyle = '#3a2b18';
-    ctx.fillRect(0, 0, this.view.w, this.view.h);
+    drawSpace(ctx, this.view.w, this.view.h, this.t);
     // Shelf.
     ctx.fillStyle = '#5a4424';
     ctx.fillRect(0, this.view.h * 0.42 + 22, this.view.w, 10);
