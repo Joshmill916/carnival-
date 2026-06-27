@@ -86,14 +86,14 @@
     ok(runStriker(7).score === 30 && runStriker(7).bigWin, 'max-power swings ring the bell: 30 + bigWin');
     ok(runStriker(7).attempts === 3, 'high striker uses all 3 swings');
 
-    grp('Claw Machine — joystick grabber runs its drops');
+    grp('Claw Machine — side-view grabber runs its drops');
     const runClaw = (seed) => {
       const g = new ClawMachine({ w: 400, h: 700 }, makeRng(seed));
       g.init();
       const dropX = g.dropBtn.x + g.dropBtn.w / 2, dropY = g.dropBtn.y + g.dropBtn.h / 2;
       let guard = 0;
       while (!g.isDone() && guard++ < 20000) {
-        if (g.state === 'idle') {
+        if (g.clawPhase === 'idle') {
           let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'tap',x:dropX,y:dropY}) });
         } else {
           g.handleInput({ consumeGesture: () => null });
