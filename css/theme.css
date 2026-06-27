@@ -1,22 +1,37 @@
 :root {
-  --bg: #14122b;
-  --panel: #1f1b3a;
-  --panel-2: #2a2550;
-  --ink: #f5f3ff;
-  --muted: #b7b0d8;
-  --accent: #ffd14d;
-  --pink: #ff5d8f;
-  --green: #3ddc97;
-  --blue: #5b8cff;
-  --danger: #ff5d5d;
+  /* --- Flat-modern / neon-arcade palette --- */
+  --bg: #0a0918;          /* deep space navy — main background */
+  --surface: #13112a;     /* slightly lighter — panel backgrounds */
+  --border: #2a2650;      /* subtle panel borders */
+  --neon-pink: #ff2d78;
+  --neon-cyan: #00e5ff;
+  --neon-yellow: #ffe600;
+  --neon-purple: #b44fff;
+  --text-primary: #f0eeff;
+  --text-muted: #8880b0;
+
+  /* --- Legacy aliases remapped onto the new palette so existing rules
+     pick up the new look automatically. --- */
+  --panel: var(--surface);
+  --panel-2: var(--border);
+  --ink: var(--text-primary);
+  --muted: var(--text-muted);
+  --accent: var(--neon-yellow);
+  --pink: var(--neon-pink);
+  --cyan: var(--neon-cyan);
+  --purple: var(--neon-purple);
+  --green: #2af5a0;
+  --blue: var(--neon-cyan);
+  --danger: #ff4d6d;
+
   --radius: 14px;
-  --font: 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font: 'Outfit', 'Trebuchet MS', system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 body {
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text-primary);
   font-family: var(--font);
 }
 

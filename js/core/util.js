@@ -28,6 +28,20 @@ export function formatTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Glow helpers — intentionally FLAT. Canvas shadowBlur gets multiplied by the
+// device pixel ratio, so on a high-DPI phone (3x) a small blur became a huge
+// hazy halo that made the whole game look like a blurry "fish-eye". We keep
+// these as no-ops so every call site stays simple; the neon look now comes
+// purely from bright fills, strokes and colors (no bloom).
+export function setGlow(ctx, _color, _blur = 0) {
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+}
+export function clearGlow(ctx) {
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+}
+
 // Seeded PRNG (mulberry32) so mini-games are deterministic for testing.
 export function makeRng(seed = (Math.random() * 2 ** 32) >>> 0) {
   let a = seed >>> 0;

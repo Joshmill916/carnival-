@@ -1,6 +1,7 @@
 // Ring Toss: swipe up toward the pegs to lob a ring. A ring landing over a peg
 // while descending = ringed. 3 rings; farther/smaller pegs are worth more.
 import { MiniGame } from './MiniGame.js';
+import { drawSpace } from '../ui/Backdrop.js';
 import { drawRing, drawPeg } from '../ui/Sprites.js';
 import { dist } from '../core/util.js';
 import { Audio } from '../core/Audio.js';
@@ -117,8 +118,7 @@ export class RingToss extends MiniGame {
   }
 
   render(ctx) {
-    ctx.fillStyle = '#1c3a5e';
-    ctx.fillRect(0, 0, this.view.w, this.view.h);
+    drawSpace(ctx, this.view.w, this.view.h, this.t);
     // Pegs back-to-front.
     for (const p of this.pegs) drawPeg(ctx, p.x, p.y, p.ringed, p.points);
     // Launch marker.

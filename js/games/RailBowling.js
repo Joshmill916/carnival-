@@ -2,6 +2,7 @@
 // The rail has a bump near the far end. Too weak = rolls back. Too strong =
 // flies off the far end. Hit the sweet spot to land it on the far side. 3 rolls.
 import { MiniGame } from './MiniGame.js';
+import { drawSpace } from '../ui/Backdrop.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -133,8 +134,7 @@ export class RailBowling extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    ctx.fillStyle = '#1e1a30';
-    ctx.fillRect(0, 0, W, H);
+    drawSpace(ctx, W, H, this.t);
 
     const ry = this.railY;
 
