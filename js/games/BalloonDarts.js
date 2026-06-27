@@ -1,6 +1,7 @@
 // Balloon Darts: tap a balloon (or flick toward it) to throw a dart. Balloons
 // drift side to side; colour = point value. 5 darts.
 import { MiniGame } from './MiniGame.js';
+import { drawSpace } from '../ui/Backdrop.js';
 import { drawBalloon, drawDart } from '../ui/Sprites.js';
 import { circleHit } from '../core/util.js';
 import { Audio } from '../core/Audio.js';
@@ -120,8 +121,7 @@ export class BalloonDarts extends MiniGame {
   }
 
   render(ctx) {
-    ctx.fillStyle = '#2b1d3a';
-    ctx.fillRect(0, 0, this.view.w, this.view.h);
+    drawSpace(ctx, this.view.w, this.view.h, this.t);
     for (const b of this.balloons) drawBalloon(ctx, b);
     // Launch hand marker.
     ctx.fillStyle = 'rgba(255,255,255,0.18)';

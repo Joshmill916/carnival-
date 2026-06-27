@@ -1,6 +1,7 @@
 // Basket Toss: throw a softball so it bounces off an angled wooden board and
 // lands in the basket. Swipe UP (with optional lateral lean) to throw. 3 tries.
 import { MiniGame } from './MiniGame.js';
+import { drawSpace } from '../ui/Backdrop.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -134,8 +135,7 @@ export class BasketToss extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    ctx.fillStyle = '#1a2a14';
-    ctx.fillRect(0, 0, W, H);
+    drawSpace(ctx, W, H, this.t);
 
     // Ground.
     ctx.fillStyle = '#3a2e20';

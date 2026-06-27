@@ -30,6 +30,8 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Skip the first-install claim; never auto-reload an iOS home-screen PWA
+    // (navigator.standalone) — there it causes a launch-time reload loop.
     if (reloaded || !hadController || navigator.standalone) return;
     reloaded = true;
     window.location.reload();

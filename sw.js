@@ -49,6 +49,7 @@ const SHELL = [
   './js/ui/Modal.js',
   './js/ui/Sprites.js',
   './js/ui/Particles.js',
+  './js/ui/Backdrop.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
 ];
@@ -66,6 +67,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
+      // Do NOT claim the live page: seizing it fires 'controllerchange' and, on
+      // iOS home-screen PWAs, reload-loops on every launch. An updated worker
+      // waits and takes over on the next cold start instead.
       .then(() => Promise.resolve())
   );
 });
