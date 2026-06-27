@@ -3,7 +3,8 @@
 //   'rect'  — a little colored square (the original burst confetti bit)
 //   'emoji' — a tumbling emoji (food eruptions, etc.)
 //   'text'  — a rising, fading label like "+5"
-const CONFETTI_COLORS = ['#ff5d8f', '#ffd14d', '#5b8cff', '#3ddc97', '#ff8f4d', '#b07cff', '#fff7e6'];
+// Neon-arcade confetti: a mix of all four neon accents (plus white sparks).
+const CONFETTI_COLORS = ['#ff2d78', '#00e5ff', '#ffe600', '#b44fff', '#ffffff'];
 
 export class Particles {
   constructor() {
