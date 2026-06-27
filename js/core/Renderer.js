@@ -56,25 +56,32 @@ export class Camera {
   constructor() {
     this.x = 0;
     this.y = 0;
+    this.zoom = 1;
   }
-  follow(targetX, targetY, viewW, viewH, worldW, worldH) {
-    let x = targetX - viewW / 2;
-    let y = targetY - viewH / 2;
+  // `zoom` < 1 pulls the camera back so more of the world is visible (important
+  // on narrow phones, where a 1:1 view feels zoomed right in on the player).
+  follow(targetX, targetY, viewW, viewH, worldW, worldH, zoom = 1) {
+    this.zoom = zoom;
+    const spanW = viewW / zoom; // world units visible across the viewport
+    const spanH = viewH / zoom;
+    let x = targetX - spanW / 2;
+    let y = targetY - spanH / 2;
     // Clamp so we never show outside the world; if the world is smaller than the
-    // view, centre it.
-    x = worldW <= viewW ? (worldW - viewW) / 2 : Math.max(0, Math.min(x, worldW - viewW));
-    y = worldH <= viewH ? (worldH - viewH) / 2 : Math.max(0, Math.min(y, worldH - viewH));
+    // visible span, centre it.
+    x = worldW <= spanW ? (worldW - spanW) / 2 : Math.max(0, Math.min(x, worldW - spanW));
+    y = worldH <= spanH ? (worldH - spanH) / 2 : Math.max(0, Math.min(y, worldH - spanH));
     this.x = x;
     this.y = y;
   }
   apply(ctx) {
     ctx.save();
+    ctx.scale(this.zoom, this.zoom);
     ctx.translate(-Math.round(this.x), -Math.round(this.y));
   }
   reset(ctx) {
     ctx.restore();
   }
   screenToWorld(sx, sy) {
-    return { x: sx + this.x, y: sy + this.y };
+    return { x: sx / this.zoom + this.x, y: sy / this.zoom + this.y };
   }
 }
