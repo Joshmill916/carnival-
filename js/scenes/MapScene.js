@@ -10,7 +10,6 @@ import {
 } from '../ui/Sprites.js';
 import { Particles } from '../ui/Particles.js';
 import { Audio } from '../core/Audio.js';
-import { drawSpace } from '../ui/Backdrop.js';
 
 const SPEED = 240; // px/s
 const TRIGGER_R = 110; // proximity to open a booth
@@ -260,7 +259,8 @@ export class MapScene extends Scene {
 
   render(ctx) {
     const r = this.game.renderer;
-    drawSpace(ctx, r.width, r.height, this.t);
+    ctx.fillStyle = '#0e1630';
+    ctx.fillRect(0, 0, r.width, r.height);
 
     this.game.camera.follow(this.pos.x, this.pos.y, r.width, r.height, WORLD.w, WORLD.h);
     this.game.camera.apply(ctx);

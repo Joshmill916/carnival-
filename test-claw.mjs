@@ -1,104 +1,264 @@
-// Headless Node.js smoke-test for the side-view (pseudo-3D) ClawMachine.js.
+// Headless Node.js smoke-test for the side-view ClawMachine.js.
 // Run from the repo root: node test-claw.mjs
 
 const DROPS = 5; // must match ClawMachine's DROPS constant
 
 // --- Browser stubs (must be set before any module is imported) ---
-Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+globalThis.localStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+globalThis.window = { AudioContext: null, webkitAudioContext: null };
 globalThis.performance = { now: () => 0 };
-const mn = { connect() { return this; }, start() {}, stop() {},
-  frequency: { value: 0, setValueAtTime() {} },
-  gain: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} } };
-globalThis.window = { AudioContext: class {
-  constructor() { this.currentTime = 0; this.destination = {};
-    this.createOscillator = () => ({ ...mn }); this.createGain = () => ({ ...mn }); }
-} };
-globalThis.AudioContext = globalThis.window.AudioContext;
 
+// --- Imports ---
 const { makeRng } = await import('./js/core/util.js');
+const { Audio } = await import('./js/core/Audio.js');
+
+// Silence audio so the stub AudioContext is never invoked.
+const noop = () => {};
+Audio.throw_ = noop;
+Audio.hit = noop;
+Audio.fail = noop;
+Audio.win = noop;
+
 const { ClawMachine } = await import('./js/games/ClawMachine.js');
 
-const VIEW = { w: 420, h: 760 };
-const mkInput = () => ({ drag: { active: false, startX: 0, startY: 0, x: 0, y: 0 }, keys: new Set(), consumeGesture: () => null });
-
+// --- Test harness ---
 let pass = 0, fail = 0;
-const ok = (c, m) => c ? (pass++, console.log('  ok   ' + m)) : (fail++, console.log('  FAIL ' + m));
-
-const mockCtx = () => {
-  const c = {
-    _depth: 0, _neg: 0, shadowColor: '', shadowBlur: 0, globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, font: '', textAlign: '', textBaseline: '', lineCap: '',
-    save() { this._depth++; }, restore() { this._depth--; if (this._depth < 0) this._neg++; },
-    translate() {}, rotate() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arc() {}, arcTo() {}, ellipse() {},
-    quadraticCurveTo() {}, bezierCurveTo() {}, fill() {}, stroke() {}, fillRect() {}, strokeRect() {}, fillText() {}, strokeText() {},
-    setLineDash() {}, clip() {}, measureText() { return { width: 0 }; }, createLinearGradient() { return { addColorStop() {} }; },
-  };
-  return c;
+const ok = (cond, msg) => {
+  if (cond) { pass++; console.log(`  ok   ${msg}`); }
+  else { fail++; console.error(`  FAIL ${msg}`); }
 };
 
-// 1) Steering: holding "right" moves the claw right and clamps in the cabinet.
-{
-  const g = new ClawMachine(VIEW, makeRng(1)); g.init();
-  const x0 = g.clawX;
-  const input = mkInput(); input.keys = new Set(['arrowright']);
-  for (let i = 0; i < 60; i++) { g.handleInput(input); g.update(1 / 60); }
-  ok(g.clawX > x0 + 10, 'arrow-right steers the claw right');
-  ok(g.clawX <= g._clawMaxX + 0.001, 'claw clamps at the right wall');
+// Mock 2-D context: tracks save/restore depth, swallows everything else.
+function makeMockCtx() {
+  let depth = 0;
+  return new Proxy({}, {
+    get(_, k) {
+      if (k === 'save') return () => { depth++; };
+      if (k === 'restore') return () => { depth--; };
+      if (k === 'getSaveDepth') return () => depth;
+      // createLinearGradient must return an object with addColorStop.
+      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+      return (..._a) => {};
+    },
+    set() { return true; },
+  });
 }
 
-// 2) Drops + grabs + termination — line the claw up with the nearest prize.
-function runAimNearest(seed) {
-  const g = new ClawMachine(VIEW, makeRng(seed)); g.init();
-  const startCount = g.prizes.length;
-  const input = mkInput(); let frames = 0;
-  while (!g.isDone() && frames++ < 20000) {
+// Minimal fake input.
+function fakeInput({ dragActive = false, startX = 0, startY = 0, x = 0, y = 0,
+                     gesture = null, keys = [] } = {}) {
+  let consumed = false;
+  return {
+    drag: { active: dragActive, startX, startY, x, y, dx: x - startX, dy: y - startY },
+    keys: new Set(keys),
+    consumeGesture() {
+      if (consumed || !gesture) return null;
+      consumed = true;
+      return gesture;
+    },
+  };
+}
+
+const VIEW = { w: 400, h: 700 };
+const dropCenter = (g) => ({ x: g.dropBtn.x + g.dropBtn.w / 2, y: g.dropBtn.y + g.dropBtn.h / 2 });
+
+// Drive the game to completion pressing DROP whenever the claw is idle.
+function runToEnd(seed, preDrop = null) {
+  const g = new ClawMachine(VIEW, makeRng(seed));
+  g.init();
+  const dc = dropCenter(g);
+  let guard = 0;
+  while (!g.isDone() && guard++ < 30000) {
     if (g.clawPhase === 'idle') {
-      let best = null, bd = Infinity;
-      for (const p of g.prizes) { if (p.grabbed) continue; const d = Math.abs(p.sx - g.clawX); if (d < bd) { bd = d; best = p; } }
-      if (best) g.clawX = best.sx;
-      input.keys = new Set([' ']); g.handleInput(input); g.update(1 / 60); input.keys = new Set();
-    } else { g.handleInput(input); g.update(1 / 60); }
-  }
-  const grabbed = g.prizes.filter((p) => p.grabbed).length;
-  return { g, result: g.getResult(), grabbed, startCount };
-}
-let anyHits = 0;
-for (let s = 1; s <= 8; s++) {
-  const r = runAimNearest(s);
-  if (r.result.hits > 0) anyHits++;
-  ok(r.g.isDone() && r.result.attempts <= DROPS, `seed ${s}: ends within ${DROPS} drops`);
-  ok(r.result.hits === r.grabbed && r.result.hits <= r.result.attempts, `seed ${s}: hits == grabbed prizes (<= drops)`);
-}
-ok(anyHits > 0, 'aligned drops produce grabs');
-
-// 3) Determinism + result shape.
-{
-  const a = runAimNearest(3).result, b = runAimNearest(3).result;
-  ok(JSON.stringify(a) === JSON.stringify(b), 'same seed + input => identical result');
-  const keys = ['gameKey', 'score', 'hits', 'attempts', 'won', 'bigWin', 'coinBonus'];
-  ok(keys.every((k) => k in a), 'result has the full shape');
-  ok(a.gameKey === 'claw', "gameKey is 'claw'");
-  ok((a.score >= 24) === a.bigWin && (a.score >= 24 ? 15 : 0) === a.coinBonus, 'bigWin/coinBonus thresholds');
-}
-
-// 4) render() never throws + balanced save/restore + no leaked glow.
-{
-  const g = new ClawMachine(VIEW, makeRng(2)); g.init();
-  let threw = false, unbalanced = false, glow = false;
-  try {
-    for (let i = 0; i < 140; i++) {
-      const ctx = mockCtx();
-      g.render(ctx);
-      if (ctx._depth !== 0 || ctx._neg > 0) unbalanced = true;
-      if (ctx.shadowBlur !== 0) glow = true;
-      g.handleInput(mkInput()); g.update(1 / 60);
-      if (i === 5) g._startDrop();
+      if (preDrop) preDrop(g);
+      g.handleInput(fakeInput({ gesture: { type: 'tap', x: dc.x, y: dc.y } }));
+    } else {
+      g.handleInput(fakeInput());
     }
-  } catch (e) { threw = true; console.log('   render threw: ' + e.message); }
-  ok(!threw, 'render() never throws on a mock ctx');
-  ok(!unbalanced, 'render save/restore balanced');
-  ok(!glow, 'render leaves no leaked glow');
+    g.update(1 / 60);
+  }
+  return g;
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-if (fail) process.exit(1);
+// ─── 1. Steering ─────────────────────────────────────────────────────────────
+console.log('\nSteering tests');
+{
+  const g = new ClawMachine(VIEW, makeRng(99));
+  g.init();
+  const startX = g.clawX;
+  g.handleInput(fakeInput({ dragActive: true, startX: 200, startY: 300, x: 280, y: 300 }));
+  g.update(0.4);
+  ok(g.clawX > startX, 'claw moves right when joystick dragged right');
+}
+{
+  const g = new ClawMachine(VIEW, makeRng(99));
+  g.init();
+  const startX = g.clawX;
+  g.handleInput(fakeInput({ dragActive: true, startX: 200, startY: 300, x: 120, y: 300 }));
+  g.update(0.4);
+  ok(g.clawX < startX, 'claw moves left when joystick dragged left');
+}
+{
+  const g = new ClawMachine(VIEW, makeRng(99));
+  g.init();
+  const startX = g.clawX;
+  // Deadzone: drag of only 6 px → no movement.
+  g.handleInput(fakeInput({ dragActive: true, startX: 200, startY: 300, x: 206, y: 300 }));
+  g.update(0.4);
+  ok(g.clawX === startX, 'drag within deadzone produces no movement');
+}
+{
+  // Drag only vertically — claw should not move horizontally.
+  const g = new ClawMachine(VIEW, makeRng(99));
+  g.init();
+  const startX = g.clawX;
+  g.handleInput(fakeInput({ dragActive: true, startX: 200, startY: 300, x: 200, y: 380 }));
+  g.update(0.4);
+  ok(g.clawX === startX, 'purely vertical drag does not move claw horizontally');
+}
+
+// ─── 2. Grab on an easy, aligned prize ───────────────────────────────────────
+console.log('\nGrab tests');
+{
+  const g = new ClawMachine(VIEW, makeRng(42));
+  g.init();
+
+  // Find the easiest (diff=1) prize that is horizontally closest to centre.
+  const cx = g.prizeArea.x + g.prizeArea.w / 2;
+  const easy = g.prizes
+    .filter(p => p.diff === 1.0)
+    .sort((a, b) => Math.abs(a.x - cx) - Math.abs(b.x - cx))[0];
+
+  // Place claw directly over this prize (guaranteed grab: closeness=1, prob=1).
+  g.clawX = easy.x;
+
+  const dc = dropCenter(g);
+  g.handleInput(fakeInput({ gesture: { type: 'tap', x: dc.x, y: dc.y } }));
+
+  let guard = 0;
+  while (g.clawPhase !== 'idle' && !g.isDone() && guard++ < 5000) {
+    g.handleInput(fakeInput());
+    g.update(1 / 60);
+  }
+
+  ok(g.score > 0, 'aligned drop on diff=1 prize banks points');
+  ok(g.hits === 1, 'hits counter incremented after successful grab');
+  ok(easy.grabbed, 'prize is marked grabbed after successful lift');
+}
+
+// ─── 3. Slip animation on a near-miss ────────────────────────────────────────
+console.log('\nSlip animation tests');
+{
+  // Force a near-miss: position claw at the far edge of GRAB_R so probability is low.
+  // Use a seeded rng where the first drop will fail.
+  // We check that _slipPrize is set after grabbing phase.
+  const g = new ClawMachine(VIEW, makeRng(7));
+  g.init();
+  // Place claw near the edge of the nearest diff=1 prize so prob is reduced.
+  const edgePrize = g.prizes.filter(p => p.diff === 1.0)[0];
+  g.clawX = edgePrize.x + 42; // within GRAB_R=48 but low closeness
+
+  const dc = dropCenter(g);
+  g.handleInput(fakeInput({ gesture: { type: 'tap', x: dc.x, y: dc.y } }));
+
+  // Run through drop → grabbing.
+  let guard = 0;
+  while (g.clawPhase !== 'lifting' && g.clawPhase !== 'idle' && !g.isDone() && guard++ < 5000) {
+    g.handleInput(fakeInput());
+    g.update(1 / 60);
+  }
+
+  // Either a grab succeeded or a slip animation started — both are valid outcomes.
+  // hits is incremented only after lifting completes; check heldPrize for an in-progress grab.
+  const hadSlip = g._slipPrize !== null;
+  const hadGrab = g.heldPrize !== null;
+  ok(hadSlip || hadGrab, 'edge-of-reach drop either grabs or triggers slip animation');
+}
+
+// ─── 4. Game ends after DROPS attempts ───────────────────────────────────────
+console.log('\nCompletion tests');
+{
+  const g = runToEnd(7);
+  ok(g.isDone(), 'game ends when attempts run out');
+  ok(g.attempts === DROPS, `exactly ${DROPS} drop attempts logged`);
+}
+
+// ─── 5. getResult() shape and determinism ────────────────────────────────────
+console.log('\ngetResult() tests');
+{
+  const r1 = runToEnd(42).getResult();
+  const r2 = runToEnd(42).getResult();
+  ok(JSON.stringify(r1) === JSON.stringify(r2), 'same seed → identical result (deterministic)');
+  ok(r1.gameKey === 'claw', 'gameKey is "claw"');
+  ok(typeof r1.score === 'number', 'score is a number');
+  ok(typeof r1.hits === 'number', 'hits is a number');
+  ok(typeof r1.attempts === 'number', 'attempts is a number');
+  ok(typeof r1.won === 'boolean', 'won is boolean');
+  ok(typeof r1.bigWin === 'boolean', 'bigWin is boolean');
+  ok(r1.coinBonus === (r1.bigWin ? 15 : 0), 'coinBonus matches bigWin');
+}
+
+// ─── 6. render() safety (no throw; balanced save/restore) ────────────────────
+console.log('\nrender() tests');
+{
+  // Idle phase.
+  const g = new ClawMachine(VIEW, makeRng(1));
+  g.init();
+  const ctx = makeMockCtx();
+  let threw = false;
+  try { g.render(ctx, 1); } catch (e) { threw = true; console.error('  render threw:', e); }
+  ok(!threw, 'render() does not throw in idle phase');
+  ok(ctx.getSaveDepth() === 0, 'save/restore balanced after render (idle)');
+}
+{
+  // Dropping phase.
+  const g = new ClawMachine(VIEW, makeRng(1));
+  g.init();
+  g._startDrop();
+  g.update(0.3);
+  const ctx = makeMockCtx();
+  let threw = false;
+  try { g.render(ctx, 1); } catch (e) { threw = true; console.error('  render threw:', e); }
+  ok(!threw, 'render() does not throw during dropping phase');
+  ok(ctx.getSaveDepth() === 0, 'save/restore balanced (dropping)');
+}
+{
+  // Lifting with a held prize.
+  const g = new ClawMachine(VIEW, makeRng(42));
+  g.init();
+  const easy = g.prizes.find(p => p.diff === 1.0);
+  g.clawX = easy.x;
+  const dc = dropCenter(g);
+  g.handleInput(fakeInput({ gesture: { type: 'tap', x: dc.x, y: dc.y } }));
+  let guard = 0;
+  while (g.clawPhase !== 'lifting' && guard++ < 5000) {
+    g.handleInput(fakeInput()); g.update(1 / 60);
+  }
+  g.handleInput(fakeInput()); g.update(0.1);
+  const ctx = makeMockCtx();
+  let threw = false;
+  try { g.render(ctx, 1); } catch (e) { threw = true; console.error('  render threw:', e); }
+  ok(!threw, 'render() does not throw while lifting a prize');
+  ok(ctx.getSaveDepth() === 0, 'save/restore balanced (lifting)');
+}
+{
+  // Slip animation visible in render.
+  const g = new ClawMachine(VIEW, makeRng(1));
+  g.init();
+  g._slipPrize = { emoji: '🧸', x: 200, startY: 400 };
+  g._slipT = 0.1;
+  const ctx = makeMockCtx();
+  let threw = false;
+  try { g.render(ctx, 1); } catch (e) { threw = true; console.error('  render threw:', e); }
+  ok(!threw, 'render() does not throw with active slip animation');
+  ok(ctx.getSaveDepth() === 0, 'save/restore balanced during slip animation');
+}
+
+// ─── Summary ─────────────────────────────────────────────────────────────────
+const total = pass + fail;
+console.log(`\n${total} checks: ${pass} ok, ${fail} failed`);
+if (fail > 0) process.exit(1);

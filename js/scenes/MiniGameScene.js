@@ -107,18 +107,14 @@ export class MiniGameScene extends Scene {
     if (this.celebrating) {
       this.fx.render(ctx);
       ctx.save();
-      ctx.font = '900 42px "Outfit", system-ui, sans-serif';
+      ctx.font = 'bold 40px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const by = this.view.h * 0.32;
       ctx.lineWidth = 5;
       ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.strokeText(this.banner, this.view.w / 2, by);
-      ctx.shadowColor = '#ff2d78';
-      ctx.shadowBlur = 24;
-      ctx.fillStyle = '#ff2d78';
-      ctx.fillText(this.banner, this.view.w / 2, by);
-      ctx.shadowBlur = 0;
+      ctx.strokeText(this.banner, this.view.w / 2, this.view.h * 0.32);
+      ctx.fillStyle = '#ffd14d';
+      ctx.fillText(this.banner, this.view.w / 2, this.view.h * 0.32);
       ctx.restore();
     }
   }

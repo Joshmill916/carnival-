@@ -28,18 +28,6 @@ export function formatTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Neon-glow helpers: wrap a draw in setGlow(...) / clearGlow(...) to give
-// borders, bright text and accent lines an arcade glow. Always clear afterward
-// so the glow doesn't leak onto later draws.
-export function setGlow(ctx, color, blur = 18) {
-  ctx.shadowColor = color;
-  ctx.shadowBlur = blur;
-}
-export function clearGlow(ctx) {
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'transparent';
-}
-
 // Seeded PRNG (mulberry32) so mini-games are deterministic for testing.
 export function makeRng(seed = (Math.random() * 2 ** 32) >>> 0) {
   let a = seed >>> 0;

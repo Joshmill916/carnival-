@@ -2,8 +2,6 @@
 // drawn with shapes, gradients and emoji in a bright, lively fair style. Many
 // draws take a time `t` (seconds) so rides, lights and people animate.
 
-import { setGlow, clearGlow } from '../core/util.js';
-
 function roundRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -255,26 +253,6 @@ export function drawBooth(ctx, booth, t, locked = false) {
     ctx.font = '34px serif';
     ctx.fillText(emoji, x, top + h - 30);
   }
-
-  // Neon frame with marquee corner accents, pulsing with game time.
-  const pulse = 0.6 + 0.4 * Math.sin(t * 2 + x * 0.05);
-  const frameCol = locked ? '#6a6a80' : color;
-  const fx = left - 6, fy = top - 18, fw = w + 12, fh = h + 28;
-  ctx.save();
-  ctx.globalAlpha = (locked ? 0.5 : 1) * pulse;
-  setGlow(ctx, frameCol, 14);
-  ctx.strokeStyle = frameCol;
-  ctx.lineWidth = 2.5;
-  roundRect(ctx, fx, fy, fw, fh, 12);
-  ctx.stroke();
-  ctx.fillStyle = frameCol;
-  for (const [cxp, cyp] of [[fx, fy], [fx + fw, fy], [fx, fy + fh], [fx + fw, fy + fh]]) {
-    ctx.beginPath();
-    ctx.arc(cxp, cyp, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  clearGlow(ctx);
-  ctx.restore();
 
   ctx.restore();
 }

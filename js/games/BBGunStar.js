@@ -2,7 +2,6 @@
 // The star is represented as a grid of sample points; each BB shot covers a
 // circular blast radius. Score = fraction of star destroyed × 10. 12 shots.
 import { MiniGame } from './MiniGame.js';
-import { drawSpace } from '../ui/Backdrop.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -106,7 +105,8 @@ export class BBGunStar extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    drawSpace(ctx, W, H, this.t);
+    ctx.fillStyle = '#2a1a10';
+    ctx.fillRect(0, 0, W, H);
 
     // Target backing board.
     ctx.fillStyle = '#8b6343';
