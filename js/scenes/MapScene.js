@@ -262,7 +262,12 @@ export class MapScene extends Scene {
     const r = this.game.renderer;
     drawSpace(ctx, r.width, r.height, this.t);
 
-    this.game.camera.follow(this.pos.x, this.pos.y, r.width, r.height, WORLD.w, WORLD.h);
+    // Zoom the camera out on narrow screens so you see a good slice of the fair
+    // (~MAP_VIEW_W world units wide) instead of being zoomed right onto the
+    // player. Desktop/wide screens stay 1:1.
+    const MAP_VIEW_W = 640;
+    const zoom = Math.min(1, r.width / MAP_VIEW_W);
+    this.game.camera.follow(this.pos.x, this.pos.y, r.width, r.height, WORLD.w, WORLD.h, zoom);
     this.game.camera.apply(ctx);
 
     drawGround(ctx, WORLD, this.game.camera);

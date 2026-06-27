@@ -24,20 +24,20 @@ function shadow(ctx, x, y, rx, ry) {
 
 // --- Ground ------------------------------------------------------------------
 export function drawGround(ctx, world, camera) {
-  // Grass gradient.
+  // Grass gradient (richer, less washed-out greens).
   const g = ctx.createLinearGradient(0, 0, 0, world.h);
-  g.addColorStop(0, '#4bb061');
-  g.addColorStop(1, '#37934e');
+  g.addColorStop(0, '#3fae57');
+  g.addColorStop(1, '#1f7e3c');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, world.w, world.h);
 
   // Soft mowed stripes.
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
   for (let y = 0; y < world.h; y += 96) ctx.fillRect(0, y, world.w, 48);
 
   // Sandy paths: a central plaza with arms reaching toward the three booths.
   const cx = world.w / 2, cy = world.h * 0.55;
-  ctx.strokeStyle = '#d9bd86';
+  ctx.strokeStyle = '#e0bd7e';
   ctx.lineWidth = 64;
   ctx.lineCap = 'round';
   const arms = [
