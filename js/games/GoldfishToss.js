@@ -2,7 +2,6 @@
 // increasing distances — near (3 pts), mid (5 pts), far (8 pts). Swipe UP
 // to throw; the lateral angle steers left/right toward the target bowls.
 import { MiniGame } from './MiniGame.js';
-import { drawSpace } from '../ui/Backdrop.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -110,7 +109,8 @@ export class GoldfishToss extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    drawSpace(ctx, W, H, this.t);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
 
     // Shelf backdrop.
     ctx.fillStyle = '#2e1f0e';

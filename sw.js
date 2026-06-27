@@ -1,7 +1,7 @@
 // Offline service worker for Carnival Games. Bump CACHE_VERSION whenever the app
 // shell changes so installed players get the new build on their next online load.
 // Only app code is cached — game progress lives in localStorage and is untouched.
-const CACHE_VERSION = 'carnival-v6';
+const CACHE_VERSION = 'carnival-v7';
 
 const SHELL = [
   './',
@@ -49,7 +49,6 @@ const SHELL = [
   './js/ui/Modal.js',
   './js/ui/Sprites.js',
   './js/ui/Particles.js',
-  './js/ui/Backdrop.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
 ];

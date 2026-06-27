@@ -2,7 +2,6 @@
 // stronger swipe sends it higher; reach the very top to RING THE BELL for the
 // max score. 3 swings. The harder the flick, the higher the puck flies.
 import { MiniGame } from './MiniGame.js';
-import { drawSpace } from '../ui/Backdrop.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -110,7 +109,8 @@ export class HighStriker extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    drawSpace(ctx, W, H, this.t);
+    ctx.fillStyle = '#241a3a';
+    ctx.fillRect(0, 0, W, H);
 
     const towerW = 52;
     const left = this.cx - towerW / 2;
