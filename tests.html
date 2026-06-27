@@ -86,7 +86,7 @@
     ok(runStriker(7).score === 30 && runStriker(7).bigWin, 'max-power swings ring the bell: 30 + bigWin');
     ok(runStriker(7).attempts === 3, 'high striker uses all 3 swings');
 
-    grp('Claw Machine — 5 drops, steers and scores');
+    grp('Claw Machine — 2D claw, 5 grabs, a real challenge');
     const runClaw = (seed) => {
       const g = new ClawMachine({ w: 400, h: 700 }, makeRng(seed));
       g.init();
@@ -105,7 +105,8 @@
       }
       return g.getResult();
     };
-    ok(runClaw(1).attempts === 5, 'claw machine uses all 5 drops');
+    ok(runClaw(1).attempts === 5, 'claw machine uses all 5 grabs');
+    ok(JSON.stringify(runClaw(1)) === JSON.stringify(runClaw(1)), 'claw result is deterministic');
     ok(runClaw(1).gameKey === 'claw', 'claw machine returns correct gameKey');
 
     grp('BB Gun Star — all 12 shots fire and score');

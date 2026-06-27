@@ -1,17 +1,20 @@
-// Claw Machine — soft pastel, kid-friendly cabinet. Steer the claw left/right
-// with the floating joystick (or A/D / arrows), tap GRAB to scoop. It ALWAYS
-// catches a prize, wherever you drop it — pure feel-good. 5 grabs; the bin is
-// packed with cute prizes.
+// Claw Machine — front-view pastel cabinet with a real challenge. A floating
+// joystick flies the claw freely in 2D (left/right + up/down); drive it down
+// into the pile of prizes heaped at the bottom, then tap GRAB to close and
+// lift. Grabbing is NOT a sure thing: you must centre on a prize, the rare
+// high-value ones are slippery, and a weak grip slips on the way up — the fun
+// of "barely grabbing one". 5 grabs. WASD/arrows + Space/Enter on desktop.
 import { MiniGame } from './MiniGame.js';
 import { Audio } from '../core/Audio.js';
-import { clamp } from '../core/util.js';
+import { clamp, lerp } from '../core/util.js';
 
 const JOY_RADIUS = 60;
 const JOY_DEADZONE = 0.18;
-const CLAW_SPEED = 330;
-const DROP_TIME = 0.55;
-const LIFT_TIME = 0.55;
-const CLOSE_TIME = 0.35;
+const CLAW_SPEED = 320;     // px/s
+const CLOSE_TIME = 0.32;    // prongs close
+const LIFT_TIME = 0.75;     // rise back to the top
+const GRAB_R = 46;          // how near a prize must be to catch it
+const PRONG_REACH = 30;     // how far a held prize hangs below the hub
 const DROPS = 5;
 
 // Soft pastel palette.
@@ -24,6 +27,10 @@ const CLAW_PINK = '#f7aacd';
 const CLAW_PINK_DK = '#e07ba8';
 const GRAB_TOP = '#ff9ec7';
 const GRAB_BOT = '#ff6fae';
+
+// pts → how easy the prize is to keep (higher = grippier). Rare high-value
+// prizes are slippery, so they slip out of the claw more often.
+const GRIP_BY_PTS = { 2: 0.95, 3: 0.85, 5: 0.70, 7: 0.55, 9: 0.42 };
 
 const PRIZE_POOL = [
   { emoji: '🧸', color: '#f3d2b3', pts: 2, w: 5 },
@@ -59,7 +66,7 @@ export class ClawMachine extends MiniGame {
   init() {
     const W = this.view.w, H = this.view.h;
     this.attemptsLeft = DROPS;
-    this.hint = 'Steer left/right, tap GRAB — you always win!';
+    this.hint = 'Joystick to fly the claw • GRAB to grab';
 
     const btnW = 150, btnH = 60;
     this.dropBtn = { x: W / 2 - btnW / 2, y: H - btnH - 38, w: btnW, h: btnH };
@@ -76,25 +83,31 @@ export class ClawMachine extends MiniGame {
       w: this.cab.w - 16,
       h: this.cab.h - topH - 14,
     };
+    this.floorY = this.prizeArea.y + this.prizeArea.h - 16;
 
-    this.clawTopY = this.railY + 4;
-    this.clawBottomY = this.prizeArea.y + this.prizeArea.h - 34;
+    // The claw flies freely in this box.
+    this._clawMinX = this.cab.x + 34;
+    this._clawMaxX = this.cab.x + this.cab.w - 34;
+    this.clawTopY = this.railY + 18;
+    this._clawMinY = this.clawTopY;
+    this._clawMaxY = this.floorY - 8;
+    this.clawX = (this._clawMinX + this._clawMaxX) / 2;
+    this.clawY = this.clawTopY;
 
-    this.clawX = this.cab.x + this.cab.w / 2;
-    this._clawMinX = this.cab.x + 30;
-    this._clawMaxX = this.cab.x + this.cab.w - 30;
-
-    this.clawPhase = 'idle'; // idle | dropping | grabbing | lifting
+    this.clawPhase = 'idle'; // idle | grabbing | lifting
     this.clawT = 0;
-    this.dropProgress = 0;
+    this._liftStartY = this.clawTopY;
     this.heldPrize = null;
+    this._willSlip = false;
+    this.slipping = null;
 
     this._steerX = 0;
+    this._steerY = 0;
     this._joyBase = null;
     this._joyKnob = { x: 0, y: 0 };
     this._dragOnBtn = false;
     this._wasDragging = false;
-    this._dropKeyWasDown = false;
+    this._grabKeyWasDown = false;
 
     this._scatterPrizes();
   }
@@ -104,29 +117,36 @@ export class ClawMachine extends MiniGame {
     for (const p of PRIZE_POOL) for (let i = 0; i < p.w; i++) pool.push(p);
 
     const pa = this.prizeArea;
-    const count = 24 + Math.floor(this.rng() * 7); // 24–30, packed
+    const count = 13 + Math.floor(this.rng() * 5); // 13–17 big prizes
     this.prizes = [];
     for (let i = 0; i < count; i++) {
       const tmpl = pool[Math.floor(this.rng() * pool.length)];
+      // Heap toward the floor (t² bias) and toward the centre (avg of 3 → mound).
+      const t = this.rng();
+      const cxBias = (this.rng() + this.rng() + this.rng()) / 3;
       this.prizes.push({
         emoji: tmpl.emoji,
         color: tmpl.color,
         pts: tmpl.pts,
-        size: 30 + Math.floor(this.rng() * 8), // 30–38
-        x: pa.x + 24 + this.rng() * (pa.w - 48),
-        y: pa.y + 26 + this.rng() * (pa.h - 44),
+        grip: GRIP_BY_PTS[tmpl.pts] ?? 0.7,
+        size: 44 + Math.floor(this.rng() * 14), // 44–58, big
+        x: pa.x + 34 + cxBias * (pa.w - 68),
+        y: this.floorY - t * t * (pa.h * 0.5),
         grabbed: false,
+        vy: 0,
       });
     }
-    // Draw top-to-bottom for a packed, overlapping look.
+    // Lower prizes (nearer the floor/front) drawn last, on top.
     this.prizes.sort((a, b) => a.y - b.y);
   }
 
   handleInput(input) {
     if (this.done) return;
     this._steerX = 0;
+    this._steerY = 0;
     const drag = input.drag;
     const drop = this.dropBtn;
+    const canMove = this.clawPhase === 'idle';
 
     if (drag && drag.active) {
       if (!this._wasDragging) {
@@ -138,11 +158,11 @@ export class ClawMachine extends MiniGame {
       }
       if (!this._dragOnBtn && this._joyBase) {
         let dx = (drag.x - drag.startX) / JOY_RADIUS;
-        const dy = (drag.y - drag.startY) / JOY_RADIUS;
+        let dy = (drag.y - drag.startY) / JOY_RADIUS;
         const mag = Math.hypot(dx, dy);
-        if (mag > 1) dx /= mag;
-        if (Math.abs(dx) < JOY_DEADZONE) dx = 0;
-        this._steerX = clamp(dx, -1, 1);
+        if (mag > 1) { dx /= mag; dy /= mag; }
+        if (Math.hypot(dx, dy) < JOY_DEADZONE) { dx = 0; dy = 0; }
+        if (canMove) { this._steerX = clamp(dx, -1, 1); this._steerY = clamp(dy, -1, 1); }
         const rawMag = Math.hypot(drag.x - drag.startX, drag.y - drag.startY);
         const cMag = Math.min(rawMag, JOY_RADIUS);
         const angle = rawMag > 0 ? Math.atan2(drag.y - drag.startY, drag.x - drag.startX) : 0;
@@ -158,83 +178,123 @@ export class ClawMachine extends MiniGame {
     }
 
     if (input.keys) {
-      if (input.keys.has('arrowleft') || input.keys.has('a')) this._steerX = -1;
-      if (input.keys.has('arrowright') || input.keys.has('d')) this._steerX = 1;
-      const dropKey = input.keys.has(' ') || input.keys.has('enter');
-      if (dropKey && !this._dropKeyWasDown && this.clawPhase === 'idle') this._startDrop();
-      this._dropKeyWasDown = dropKey;
+      if (canMove) {
+        if (input.keys.has('arrowleft') || input.keys.has('a')) this._steerX = -1;
+        if (input.keys.has('arrowright') || input.keys.has('d')) this._steerX = 1;
+        if (input.keys.has('arrowup') || input.keys.has('w')) this._steerY = -1;
+        if (input.keys.has('arrowdown') || input.keys.has('s')) this._steerY = 1;
+      }
+      const grabKey = input.keys.has(' ') || input.keys.has('enter');
+      if (grabKey && !this._grabKeyWasDown) this._startGrab();
+      this._grabKeyWasDown = grabKey;
     }
 
     const g = input.consumeGesture ? input.consumeGesture() : null;
     if (g && g.type === 'tap' && this.clawPhase === 'idle') {
       if (g.x >= drop.x && g.x <= drop.x + drop.w && g.y >= drop.y && g.y <= drop.y + drop.h) {
-        this._startDrop();
+        this._startGrab();
       }
     }
   }
 
-  _startDrop() {
+  _startGrab() {
     if (this.attemptsLeft <= 0 || this.clawPhase !== 'idle') return;
-    this.clawPhase = 'dropping';
+    this.clawPhase = 'grabbing';
     this.clawT = 0;
-    this.dropProgress = 0;
-    this.heldPrize = null;
+    this._joyBase = null;
     Audio.throw_();
   }
 
   update(dt) {
     super.update(dt);
 
+    // A slipped prize tumbling back into the pile (runs in any phase).
+    if (this.slipping) {
+      const s = this.slipping;
+      s.vy += 1100 * dt;
+      s.y += s.vy * dt;
+      if (s.y >= this.floorY - 6) {
+        s.y = this.floorY - 6;
+        s.vy = 0;
+        s.grabbed = false;
+        this.slipping = null;
+      }
+    }
+
     if (this.clawPhase === 'idle') {
       this.clawX = clamp(this.clawX + this._steerX * CLAW_SPEED * dt, this._clawMinX, this._clawMaxX);
+      this.clawY = clamp(this.clawY + this._steerY * CLAW_SPEED * dt, this._clawMinY, this._clawMaxY);
+      return;
     }
 
     this.clawT += dt;
-    if (this.clawPhase === 'dropping') {
-      this.dropProgress = Math.min(this.clawT / DROP_TIME, 1);
-      if (this.clawT >= DROP_TIME) { this.clawPhase = 'grabbing'; this.clawT = 0; this._grab(); }
-    } else if (this.clawPhase === 'grabbing') {
-      if (this.clawT >= CLOSE_TIME) { this.clawPhase = 'lifting'; this.clawT = 0; }
+    if (this.clawPhase === 'grabbing') {
+      if (this.clawT >= CLOSE_TIME) {
+        this._doGrab();
+        this._liftStartY = this.clawY;
+        this.clawPhase = 'lifting';
+        this.clawT = 0;
+      }
     } else if (this.clawPhase === 'lifting') {
-      this.dropProgress = Math.max(1 - this.clawT / LIFT_TIME, 0);
-      if (this.heldPrize) { this.heldPrize.x = this.clawX; this.heldPrize.y = this._clawHeadY() + 30; }
-      if (this.clawT >= LIFT_TIME) this._finishAttempt();
+      const prog = Math.min(1, this.clawT / LIFT_TIME);
+      this.clawY = lerp(this._liftStartY, this.clawTopY, prog);
+      if (this.heldPrize) {
+        this.heldPrize.x = this.clawX;
+        this.heldPrize.y = this.clawY + PRONG_REACH;
+        // Weak grip: the prize slips out partway up — the heartbreak near-miss.
+        if (this._willSlip && prog >= 0.55) {
+          this.slipping = this.heldPrize;
+          this.slipping.vy = 30;
+          this.heldPrize = null;
+          this._willSlip = false;
+          Audio.fail();
+        }
+      }
+      if (prog >= 1) this._finishGrab();
     }
   }
 
-  // Always catches the nearest remaining prize — wherever the claw is.
-  _grab() {
+  _doGrab() {
+    const gx = this.clawX, gy = this.clawY + 10;
     let best = null, bestD = Infinity;
     for (const p of this.prizes) {
       if (p.grabbed) continue;
-      const d = Math.abs(p.x - this.clawX) + Math.abs(p.y - this.clawBottomY) * 0.25;
+      const d = Math.hypot(p.x - gx, p.y - gy);
       if (d < bestD) { bestD = d; best = p; }
     }
-    if (best) {
-      this.heldPrize = best;
+    this.heldPrize = null;
+    this._willSlip = false;
+    if (best && bestD <= GRAB_R) {
+      const centering = clamp(1 - bestD / GRAB_R, 0, 1);
+      const grip = centering * best.grip;
       best.grabbed = true;
+      this.heldPrize = best;
+      this._willSlip = this.rng() >= grip; // keep when rng() < grip
       Audio.hit();
+    } else {
+      Audio.fail();
     }
   }
 
-  _finishAttempt() {
+  _finishGrab() {
     if (this.heldPrize) {
       const pts = this.heldPrize.pts;
       this.score += pts;
       this.hits++;
-      this.particles.burst(this.clawX, this.clawTopY + 18, this.heldPrize.color, 16, 200);
-      this.particles.text(this.clawX, this.clawTopY, `+${pts}`, '#ff6fae', 24);
+      this.particles.burst(this.clawX, this.clawTopY + 16, this.heldPrize.color, 18, 220);
+      this.particles.text(this.clawX, this.clawTopY, `+${pts}`, '#ff5fa6', 26);
+      this.prizes = this.prizes.filter((p) => p !== this.heldPrize);
       if (pts >= 9) Audio.win(); else Audio.hit();
       this.heldPrize = null;
     }
     this.clawPhase = 'idle';
     this.clawT = 0;
-    this.dropProgress = 0;
     this.attempts++;
     this.attemptsLeft--;
-    const allGrabbed = this.prizes.every((p) => p.grabbed);
-    if (this.attemptsLeft <= 0 || allGrabbed) { this.done = true; this.phase = 'done'; }
-    else this.phase = 'aim';
+    if (this.attemptsLeft <= 0 || this.prizes.length === 0) {
+      this.done = true;
+      this.phase = 'done';
+    }
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -242,14 +302,13 @@ export class ClawMachine extends MiniGame {
     const W = this.view.w, H = this.view.h;
     const cab = this.cab, pa = this.prizeArea;
 
-    // Soft pastel sky.
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, SKY_TOP);
     sky.addColorStop(1, SKY_BOT);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
-    // Cabinet body (white, rounded, soft pink frame).
+    // Cabinet body.
     ctx.fillStyle = '#ffffff';
     rr(ctx, cab.x, cab.y, cab.w, cab.h, 22);
     ctx.fill();
@@ -262,38 +321,22 @@ export class ClawMachine extends MiniGame {
     rr(ctx, cab.x + 3, cab.y + 3, cab.w - 6, cab.h - 6, 19);
     ctx.stroke();
 
-    // Rail bar.
+    // Top rail.
     ctx.fillStyle = '#f4c6dc';
     rr(ctx, cab.x + 14, this.railY - 5, cab.w - 28, 8, 4);
     ctx.fill();
 
-    // Play area (cream).
+    // Glass play area + piled prizes (clipped).
     ctx.fillStyle = PLAY_BG;
     rr(ctx, pa.x, pa.y, pa.w, pa.h, 16);
     ctx.fill();
-
-    // Clip prizes to the play area so the packed pile stays tidy.
     ctx.save();
     rr(ctx, pa.x, pa.y, pa.w, pa.h, 16);
     ctx.clip();
     this._drawPrizes(ctx);
+    this._drawClaw(ctx);
     ctx.restore();
 
-    // Aim guide.
-    if (this.clawPhase === 'idle') {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,127,180,0.35)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 6]);
-      ctx.beginPath();
-      ctx.moveTo(this.clawX, this.clawTopY + 14);
-      ctx.lineTo(this.clawX, this.clawBottomY + 26);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    }
-
-    this._drawClaw(ctx);
     this._drawGrabBtn(ctx);
     this._drawJoystick(ctx);
 
@@ -306,53 +349,52 @@ export class ClawMachine extends MiniGame {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const p of this.prizes) {
-      if (p.grabbed && p !== this.heldPrize) continue;
-      if (p === this.heldPrize) continue;
-      // Soft rounded backing blob.
+      if (p === this.heldPrize) continue; // drawn with the claw
+      // soft backing blob + big emoji
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * 0.62, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
       ctx.fill();
-      // Emoji.
       ctx.font = `${p.size}px serif`;
       ctx.fillText(p.emoji, p.x, p.y + 1);
     }
+    if (this.heldPrize) this._drawOnePrize(ctx, this.heldPrize);
   }
 
-  _clawHeadY() {
-    return this.clawTopY + this.dropProgress * (this.clawBottomY - this.clawTopY);
+  _drawOnePrize(ctx, p) {
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = `${p.size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.emoji, p.x, p.y + 1);
   }
 
   _drawClaw(ctx) {
-    const cx = this.clawX;
-    const headY = this._clawHeadY();
-    const open = this.clawPhase === 'idle' || this.clawPhase === 'dropping';
-
-    // Cable.
+    const cx = this.clawX, cy = this.clawY;
+    // Trolley on the rail tracks X; cable drops to the claw.
+    ctx.fillStyle = '#e79ec0';
+    rr(ctx, cx - 16, this.railY - 6, 32, 12, 4);
+    ctx.fill();
     ctx.strokeStyle = '#d9a7c2';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(cx, this.railY);
-    ctx.lineTo(cx, headY - 6);
+    ctx.moveTo(cx, this.railY + 6);
+    ctx.lineTo(cx, cy - 12);
     ctx.stroke();
 
-    // Held prize (drawn first so the closed claw overlaps it a touch).
-    if (this.heldPrize) {
-      const hp = this.heldPrize;
-      ctx.fillStyle = hp.color;
-      ctx.beginPath();
-      ctx.arc(cx, headY + 26, hp.size * 0.62, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.font = `${hp.size}px serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(hp.emoji, cx, headY + 27);
-    }
+    // Held prize hangs below.
+    if (this.heldPrize) this._drawOnePrize(ctx, this.heldPrize);
 
-    // Two big soft rounded arms (a friendly pincer). Drawn with a darker
-    // outline pass under a pink fill pass.
-    const spread = open ? 26 : 10;
+    // Close amount: open while flying, shut once grabbing/lifting.
+    let close = 0;
+    if (this.clawPhase === 'grabbing') close = Math.min(1, this.clawT / CLOSE_TIME);
+    else if (this.clawPhase === 'lifting') close = 1;
+    const spread = lerp(26, 9, close);
     const armLen = 34;
+
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const pass of [{ c: CLAW_PINK_DK, w: 16 }, { c: CLAW_PINK, w: 11 }]) {
@@ -360,17 +402,17 @@ export class ClawMachine extends MiniGame {
       ctx.lineWidth = pass.w;
       for (const dir of [-1, 1]) {
         ctx.beginPath();
-        ctx.moveTo(cx, headY - 2);
-        ctx.quadraticCurveTo(cx + dir * spread, headY + armLen * 0.55, cx + dir * (spread * 0.55), headY + armLen);
+        ctx.moveTo(cx, cy - 10);
+        ctx.quadraticCurveTo(cx + dir * spread, cy + armLen * 0.55, cx + dir * (spread * 0.55), cy + armLen);
         ctx.stroke();
       }
     }
-    // Rounded hub.
+    // Hub.
     ctx.fillStyle = CLAW_PINK;
     ctx.strokeStyle = CLAW_PINK_DK;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, headY - 4, 13, 0, Math.PI * 2);
+    ctx.arc(cx, cy - 12, 13, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.lineCap = 'butt';
@@ -425,7 +467,7 @@ export class ClawMachine extends MiniGame {
     ctx.fill();
     if (this.hint) {
       ctx.fillStyle = 'rgba(90,40,80,0.5)';
-      const w = Math.min(this.view.w - 24, 300);
+      const w = Math.min(this.view.w - 24, 320);
       rr(ctx, this.view.w / 2 - w / 2, this.view.h - 42, w, 26, 12);
       ctx.fill();
     }
