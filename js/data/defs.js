@@ -130,6 +130,15 @@ export const LIGHT_LINES = [
 // How many wandering fair-goers to spawn.
 export const NPC_COUNT = 14;
 
+// --- 3D world tuning ---------------------------------------------------------
+// The overworld is rendered in 3D (see js/world/), where the 2D map's (x, y)
+// becomes (x, z) and y is real height. Positions above are shared by both the
+// 3D world and the 2D fallback map; these extra dimensions are 3D-only.
+// Rides are intentionally absent from COLLIDE_R — you must be able to walk into
+// one to board it.
+export const COLLIDE_R = { booth: 62, food: 42, tree: 22 };
+export const HEIGHTS = { booth: 130, food: 96, tree: 150, pole: 170 };
+
 // --- Prizes ------------------------------------------------------------------
 // Tiered catalog. Redeem tickets for a prize; trade 3 of one tier up to a prize
 // one tier higher. Higher tiers unlock as your Level climbs.

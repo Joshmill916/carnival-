@@ -30,7 +30,39 @@ export class Input {
     this._downTime = 0;
     this._pendingGesture = null;
 
+    // On-screen buttons the active scene registers (e.g. the 3D world's JUMP).
+    // A press that lands inside one of these does NOT plant the floating
+    // joystick, so you can jump without also steering.
+    this.buttons = [];
+    this._btnDown = new Map();   // buttonId → pointerId
+    this._btnPressed = new Set(); // edge-triggered, read-and-clear
+
     this._bind();
+  }
+
+  // rects: [{ id, x, y, w, h }] in logical canvas coordinates. Pass [] to clear.
+  setButtons(rects) {
+    this.buttons = rects || [];
+    this._btnDown.clear();
+    this._btnPressed.clear();
+  }
+
+  _hitButton(x, y) {
+    for (const b of this.buttons) {
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+    }
+    return null;
+  }
+
+  // Read-and-clear: true exactly once per press.
+  consumeButton(id) {
+    if (!this._btnPressed.has(id)) return false;
+    this._btnPressed.delete(id);
+    return true;
+  }
+
+  isButtonDown(id) {
+    return this._btnDown.has(id);
   }
 
   setMode(mode) {
@@ -43,6 +75,8 @@ export class Input {
     this.drag.active = false;
     this._gestureId = null;
     this._pendingGesture = null;
+    if (this._btnDown) this._btnDown.clear();
+    if (this._btnPressed) this._btnPressed.clear();
   }
 
   _bind() {
@@ -62,6 +96,13 @@ export class Input {
   _down(e) {
     e.preventDefault();
     const p = this.renderer.toCanvas(e.clientX, e.clientY);
+    // Registered buttons win over the joystick/gesture recognizers.
+    const btn = this._hitButton(p.x, p.y);
+    if (btn) {
+      this._btnDown.set(btn.id, e.pointerId);
+      this._btnPressed.add(btn.id);
+      return;
+    }
     if (this.mode === 'move' && this._joyId === null) {
       this._joyId = e.pointerId;
       this.joy.active = true;
@@ -98,6 +139,9 @@ export class Input {
   }
 
   _up(e) {
+    for (const [id, pid] of this._btnDown) {
+      if (pid === e.pointerId) this._btnDown.delete(id);
+    }
     if (e.pointerId === this._joyId) {
       this._joyId = null;
       this.joy.active = false;

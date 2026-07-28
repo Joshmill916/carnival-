@@ -7,7 +7,8 @@ import { recompute, awardTickets } from './systems/Progression.js';
 import { bus } from './core/EventBus.js';
 
 const canvas = document.getElementById('game');
-const game = new Game(canvas);
+const canvas3d = document.getElementById('game3d');
+const game = new Game(canvas, canvas3d);
 game.start();
 
 // Unlock the AudioContext on the first user interaction (mobile requirement).

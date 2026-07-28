@@ -21,8 +21,9 @@ export function defaultState() {
     },
     player: {
       name: 'Player',
-      pos: { x: 600, y: 640 }, // spawn on the central plaza
-      facing: 'up',
+      pos: { x: 600, y: 640 }, // spawn on the central plaza (map y is world z in 3D)
+      facing: 'up', // 4-way enum, used by the 2D fallback map
+      yaw: 0,       // free rotation, used by the 3D overworld
     },
     // How far you've come. Level rises with total tickets earned and opens up
     // more of the fair (higher prize tiers, future games).
