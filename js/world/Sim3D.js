@@ -22,8 +22,8 @@ export const MAX_JUMPS = 2;
 // rotates what "right" on the stick means, which rotates the camera... and you
 // run in circles. With slack, running away from the camera drags it straight
 // behind you and never spins the view.
-export const CAM_DIST = 380;    // how far back the leash lets the camera drift
-export const CAM_NEAR = 220;    // and how close it may come before being pushed out
+export const CAM_DIST = 470;    // how far back the leash lets the camera drift
+export const CAM_NEAR = 280;    // and how close it may come before being pushed out
 export const CAM_LAG = 6;       // how quickly the leash takes up slack
 export const CAM_CLEAR = 44;    // keep-out margin when the camera meets scenery
 // Floor on how far the camera can be pulled in. Deliberately small: when you

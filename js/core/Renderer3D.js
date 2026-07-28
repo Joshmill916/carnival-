@@ -3,7 +3,7 @@
 // layer keeps owning all pointer input and all overlay drawing.
 import * as THREE from '../vendor/three.module.min.js';
 
-const FOV = 60;
+const FOV = 68; // wider than a default 3rd-person cam so the fair reads as open, not cramped
 const NEAR = 1;
 const FAR = 4000;
 const MAX_DPR = 2; // 3x on a phone costs a lot and buys nothing at this poly count
