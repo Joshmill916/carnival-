@@ -18,7 +18,10 @@
   <link rel="stylesheet" href="css/ui.css">
 </head>
 <body>
-  <!-- The whole game renders here. -->
+  <!-- The 3D overworld renders here, underneath everything. -->
+  <canvas id="game3d"></canvas>
+  <!-- 2D layer: mini-games, touch controls and effects. Stays on top so it
+       keeps owning all pointer input; it is cleared transparent in the 3D world. -->
   <canvas id="game"></canvas>
   <!-- DOM HUD, modals and toasts mount here, above the canvas. -->
   <div id="overlay-root"></div>

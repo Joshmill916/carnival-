@@ -12,6 +12,16 @@ export class Scene {
   update(_dt) {}
   render(_ctx, _alpha) {}
   handleInput(_input) {}
+  // What the 2D canvas is cleared to before this scene draws. Return null for a
+  // transparent clear, which is how the 3D overworld shows through from the
+  // WebGL canvas underneath.
+  get clearColor() {
+    return '#0e1630';
+  }
+  // True for scenes whose background comes from the WebGL canvas underneath.
+  get uses3D() {
+    return false;
+  }
   // Modal scenes pause and (optionally) hide everything below them.
   get blocksUpdateBelow() {
     return true;
@@ -74,15 +84,18 @@ export class SceneManager {
       if (this.stack[i].blocksUpdateBelow) break;
     }
   }
-  render(ctx, alpha) {
-    // Find the lowest visible scene (highest one that hides everything below).
-    let start = 0;
+  // The lowest visible scene — the one that owns the background. Modal overlays
+  // (booth prompt, store, settings) sit above it and draw nothing to canvas, so
+  // this is what decides the clear colour and the rendering backend.
+  get baseRenderScene() {
     for (let i = this.stack.length - 1; i >= 0; i--) {
-      if (this.stack[i].blocksRenderBelow) {
-        start = i;
-        break;
-      }
+      if (this.stack[i].blocksRenderBelow) return this.stack[i];
     }
+    return this.stack[0] || null;
+  }
+  render(ctx, alpha) {
+    const base = this.baseRenderScene;
+    const start = base ? this.stack.indexOf(base) : 0;
     for (let i = start; i < this.stack.length; i++) {
       this.stack[i].render(ctx, alpha);
     }

@@ -1,6 +1,7 @@
 // Top-level orchestrator: owns the renderer, camera, input, loop, scene stack and
 // HUD, and exposes the navigation helpers scenes call to move between screens.
 import { Renderer, Camera } from './Renderer.js';
+import { Renderer3D, webglSupported } from './Renderer3D.js';
 import { Loop } from './Loop.js';
 import { SceneManager } from './SceneManager.js';
 import { Input } from './Input.js';
@@ -9,6 +10,7 @@ import { HUD } from '../ui/HUD.js';
 
 import { BootScene } from '../scenes/BootScene.js';
 import { MapScene } from '../scenes/MapScene.js';
+import { World3DScene } from '../scenes/World3DScene.js';
 import { BoothPromptScene } from '../scenes/BoothPromptScene.js';
 import { MiniGameScene } from '../scenes/MiniGameScene.js';
 import { ResultsScene } from '../scenes/ResultsScene.js';
@@ -17,8 +19,13 @@ import { PrizeScene } from '../scenes/PrizeScene.js';
 import { SettingsScene } from '../scenes/SettingsScene.js';
 
 export class Game {
-  constructor(canvas) {
+  constructor(canvas, canvas3d) {
     this.renderer = new Renderer(canvas);
+    // The 3D overworld is optional: without WebGL we fall back to the original
+    // top-down 2D map, which is still fully playable.
+    this.renderer3d = canvas3d && webglSupported() ? new Renderer3D(canvas3d) : null;
+    if (this.renderer3d && !this.renderer3d.ok) this.renderer3d = null;
+    this.use3d = !!this.renderer3d;
     this.camera = new Camera();
     this.input = new Input(this.renderer);
     this.state = State;
@@ -53,7 +60,8 @@ export class Game {
 
   _registerScenes() {
     this.scenes.register('Boot', (g) => new BootScene(g));
-    this.scenes.register('Map', (g) => new MapScene(g));
+    // 'Map' is the overworld, whichever backend we're on.
+    this.scenes.register('Map', (g) => (this.use3d ? new World3DScene(g) : new MapScene(g)));
     this.scenes.register('BoothPrompt', (g) => new BoothPromptScene(g));
     this.scenes.register('MiniGame', (g) => new MiniGameScene(g));
     this.scenes.register('Results', (g) => new ResultsScene(g));
@@ -73,10 +81,19 @@ export class Game {
     this.scenes.update(dt);
   }
   _render(alpha) {
-    this.renderer.clear('#0e1630');
+    // The scene that owns the background decides the backend and the clear
+    // colour — not the top of the stack, which is usually a DOM-only modal.
+    // That way the booth prompt and store float over the live 3D world instead
+    // of over a dead black screen.
+    const base = this.scenes.baseRenderScene;
+    const is3d = !!(base && base.uses3D);
+    if (this.renderer3d) this.renderer3d.setVisible(is3d);
+    this.renderer.clear(base ? base.clearColor : '#0e1630');
     const ctx = this.renderer.ctx;
     let ox = 0, oy = 0;
-    if (this.shakeT > 0) {
+    // A 3D scene shakes its own camera, so don't also shake the 2D overlay —
+    // that would jiggle the touch controls away from where you're pressing.
+    if (this.shakeT > 0 && !is3d) {
       const i = this.shakeMag * (this.shakeT / this.shakeDur);
       ox = (Math.random() * 2 - 1) * i;
       oy = (Math.random() * 2 - 1) * i;
