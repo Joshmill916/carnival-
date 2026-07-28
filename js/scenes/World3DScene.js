@@ -17,8 +17,8 @@ import {
   buildDizzyStars, animateDizzyStars, SHIRTS, SKINS, HAIRS,
 } from '../world/Actors3D.js';
 
-const CAM_HEIGHT = 260;   // how high above the player the camera floats
-const CAM_LOOK_UP = 72;   // it aims a little above his feet
+const CAM_HEIGHT = 320;   // how high above the player the camera floats
+const CAM_LOOK_UP = 80;   // it aims a little above his feet
 const CAM_SMOOTH = 9;     // vertical/positional smoothing
 
 const JUMP_BTN = { w: 108, h: 108, margin: 26 };
