@@ -9,7 +9,7 @@
 // `view` is the logical viewport { w, h } in CSS pixels (games render in screen
 // space; there is no world camera inside a mini-game).
 import { Particles } from '../ui/Particles.js';
-import { setGlow, clearGlow } from '../core/util.js';
+import { safeTop } from '../ui/BoothStage.js';
 
 export class MiniGame {
   static label = 'Mini Game';
@@ -57,40 +57,52 @@ export class MiniGame {
 
   destroy() {}
 
-  // Shared helper: draw the neon score/tries banner all games share.
+  // Shared helper: the score / tries bar every game shares. Two chunky chips
+  // that sit below the notch and clear of the ✕ quit button, plus the hint in
+  // a dark pill at the bottom so it reads over any scenery. No glow.
   _drawHud(ctx) {
-    const W = this.view.w;
-    const top = 48, h = 38, pad = 12;
+    const W = this.view.w, H = this.view.h;
+    const top = safeTop() + 8, h = 38;
     ctx.save();
-
-    // Neon panel.
-    const x = pad, w = W - pad * 2;
-    ctx.fillStyle = 'rgba(19,17,42,0.72)';
-    _roundRectPath(ctx, x, top, w, h, 12);
-    ctx.fill();
-    setGlow(ctx, '#00e5ff', 12);
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = 1.5;
-    _roundRectPath(ctx, x, top, w, h, 12);
-    ctx.stroke();
-    clearGlow(ctx);
-
     ctx.textBaseline = 'middle';
-    ctx.font = '700 17px "Outfit", system-ui, sans-serif';
-    // Score (left, neon-yellow).
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ffe600';
-    ctx.fillText(`SCORE ${this.score}`, x + 14, top + h / 2 + 1);
-    // Tries (right, neon-pink).
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ff2d78';
-    ctx.fillText(`TRIES ${this.attemptsLeft}`, x + w - 14, top + h / 2 + 1);
+    ctx.font = '800 17px "Outfit", "Trebuchet MS", system-ui, sans-serif';
+
+    const chip = (x, w, label, value, color) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      _roundRectPath(ctx, x + 1, top + 3, w, h, h / 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(28,12,40,0.86)';
+      _roundRectPath(ctx, x, top, w, h, h / 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      _roundRectPath(ctx, x + 1.5, top + 1.5, w - 3, h - 3, h / 2 - 1.5);
+      ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '700 12px "Outfit", "Trebuchet MS", system-ui, sans-serif';
+      ctx.fillText(label, x + 14, top + h / 2 + 1);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = color;
+      ctx.font = '900 19px "Outfit", "Trebuchet MS", system-ui, sans-serif';
+      ctx.fillText(String(value), x + w - 14, top + h / 2 + 1);
+    };
+    const left = 58; // clear of the ✕ button
+    const gap = 8;
+    const cw = Math.min(150, (W - left - 10 - gap) / 2);
+    chip(left, cw, 'SCORE', this.score, '#ffd84a');
+    chip(W - 10 - cw, cw, 'TRIES', this.attemptsLeft, '#ff6fae');
 
     if (this.hint) {
+      ctx.font = '700 14px "Outfit", "Trebuchet MS", system-ui, sans-serif';
+      const tw = Math.min(W - 24, ctx.measureText(this.hint).width + 32);
+      const py = H - 46;
+      ctx.fillStyle = 'rgba(20,8,30,0.78)';
+      _roundRectPath(ctx, W / 2 - tw / 2, py, tw, 30, 15);
+      ctx.fill();
       ctx.textAlign = 'center';
-      ctx.font = '600 14px "Outfit", system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(240,238,255,0.9)';
-      ctx.fillText(this.hint, W / 2, this.view.h - 28);
+      ctx.fillStyle = '#fff8e8';
+      ctx.fillText(this.hint, W / 2, py + 16);
     }
     ctx.restore();
   }

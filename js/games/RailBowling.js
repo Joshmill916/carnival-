@@ -2,9 +2,12 @@
 // The rail has a bump near the far end. Too weak = rolls back. Too strong =
 // flies off the far end. Hit the sweet spot to land it on the far side. 3 rolls.
 import { MiniGame } from './MiniGame.js';
-import { drawSpace } from '../ui/Backdrop.js';
+import { drawBoothBack, drawFloor, drawPrizeShelf, drawSign, contactShadow, rr } from '../ui/BoothStage.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
+
+// Visual exaggeration of the hump height (physics uses bumpH as-is).
+const VIS_BUMP = 1.8;
 
 export class RailBowling extends MiniGame {
   static key = 'railbowl';
@@ -19,7 +22,7 @@ export class RailBowling extends MiniGame {
     this.railLeft  = W * 0.08;
     this.railRight = W * 0.92;
     this.railLen   = this.railRight - this.railLeft;
-    this.railY     = H * 0.56;     // rail surface y
+    this.railY     = H * 0.6;      // rail surface y
 
     // Bump position and height.
     this.bumpX     = this.railLeft + this.railLen * 0.62;
@@ -107,7 +110,7 @@ export class RailBowling extends MiniGame {
     const b = this.ball;
     this.markerX = clamp(b.x, this.railLeft, this.railRight);
     this.markerColor = pts >= 10 ? '#ffd14d' : pts > 0 ? '#3ddc97' : '#ff5d5d';
-    const markerY = this.railY - this.bumpH * (this.markerX > this.bumpX ? 0.5 : 0);
+    const markerY = this._surfaceY(this.markerX) - 20;
 
     if (pts > 0) {
       this.score += pts;
@@ -132,122 +135,151 @@ export class RailBowling extends MiniGame {
     }
   }
 
+  // Rail surface height at x: flat, a smooth ramp over the bump, then raised.
+  // The hump is drawn taller than its physics height so it reads on a phone.
+  _surfaceY(x) {
+    const ry = this.railY, x0 = this.bumpX - 34, x1 = this.bumpX + 34;
+    const h = this.bumpH * VIS_BUMP;
+    if (x <= x0) return ry;
+    if (x >= x1) return ry - h;
+    const u = (x - x0) / (x1 - x0);
+    return ry - h * (0.5 - 0.5 * Math.cos(Math.PI * u));
+  }
+
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    drawSpace(ctx, W, H, this.t);
-
+    const t = this.t || 0;
     const ry = this.railY;
+    drawBoothBack(ctx, W, H, 'teal', t);
+    drawFloor(ctx, W, ry + 90, H);
+    drawPrizeShelf(ctx, 30, W - 30, H * 0.3, ['🧸', '🦄', '🐼', '🎳', '🐸', '🦆'], 34);
+    drawSign(ctx, W / 2, H * 0.3 - 110, 'ROLL IT OVER THE HUMP!', '#ffcf3f', '#0a6366', 14);
 
-    // Crowd / backdrop.
-    ctx.fillStyle = '#2a2248';
-    ctx.fillRect(0, 0, W, ry - 60);
+    // Long wooden table carrying the rail.
+    const tx0 = this.railLeft - 10, tx1 = this.railRight + 4;
+    contactShadow(ctx, (tx0 + tx1) / 2, ry + 92, (tx1 - tx0) / 2, 8, 0.35);
+    ctx.fillStyle = '#5a2c0c';
+    for (const lx of [tx0 + 14, (tx0 + tx1) / 2, tx1 - 20]) ctx.fillRect(lx, ry + 20, 8, 72);
+    const tg = ctx.createLinearGradient(0, ry + 4, 0, ry + 24);
+    tg.addColorStop(0, '#d49752');
+    tg.addColorStop(1, '#7a4416');
+    ctx.fillStyle = tg;
+    ctx.fillRect(tx0, ry + 4, tx1 - tx0, 20);
+    ctx.fillStyle = '#0fa3a3';
+    ctx.fillRect(tx0, ry + 14, tx1 - tx0, 4);
 
-    // Floor.
-    ctx.fillStyle = '#3a2e20';
-    ctx.fillRect(0, ry + 14, W, H - ry - 14);
+    // Raised ramp body under the rail.
+    ctx.fillStyle = '#b8742f';
+    ctx.beginPath();
+    ctx.moveTo(this.bumpX - 34, ry + 4);
+    for (let x = this.bumpX - 34; x <= this.railRight; x += 4) ctx.lineTo(x, this._surfaceY(x) + 4);
+    ctx.lineTo(this.railRight, ry + 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,10,0.4)';
+    ctx.lineWidth = 1;
+    for (let x = this.bumpX; x < this.railRight; x += 14) {
+      ctx.beginPath();
+      ctx.moveTo(x, this._surfaceY(x) + 6);
+      ctx.lineTo(x, ry + 4);
+      ctx.stroke();
+    }
 
-    // Rail shadow.
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(this.railLeft, ry + 8, this.railLen, 10);
+    // Win zone painted on the raised section.
+    const zoneLeft = this.bumpX + 20, zoneRight = this.railRight - 20;
+    const zy = ry - this.bumpH * VIS_BUMP;
+    const zmid = (zoneLeft + zoneRight) / 2, zw = zoneRight - zoneLeft;
+    ctx.fillStyle = '#3ddc97';
+    ctx.fillRect(zoneLeft, zy + 6, zw, 10);
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillRect(zmid - zw * 0.15, zy + 6, zw * 0.3, 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 10px "Outfit", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('WIN', zmid, zy + 26);
 
-    // Rail body (flat section left of bump, raised at bump, flat right of bump).
-    this._drawRail(ctx);
-
-    // Bump.
-    this._drawBump(ctx);
+    // The rail itself: twin chrome rods following the surface.
+    for (const [off, w, c] of [[0, 5, '#5d6676'], [-1.5, 2, '#ffffff']]) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      for (let x = this.railLeft; x <= this.railRight; x += 3) {
+        const y = this._surfaceY(x) + off;
+        if (x === this.railLeft) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // End stop post (miss if you fly past it).
+    ctx.fillStyle = '#e0303e';
+    rr(ctx, this.railRight - 2, zy - 22, 8, 26, 3);
+    ctx.fill();
 
     // Marker from last roll.
     if (this.markerX !== null) {
-      const my = ry - (this.markerX > this.bumpX ? this.bumpH * 0.35 : 0);
-      ctx.strokeStyle = this.markerColor;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([6, 4]);
+      const my = this._surfaceY(this.markerX);
+      ctx.fillStyle = this.markerColor;
       ctx.beginPath();
-      ctx.moveTo(this.markerX, my - 20);
-      ctx.lineTo(this.markerX, my + 6);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // Bowling ball.
-    if (this.ball) {
-      const bx = this.ball.x;
-      const surfaceY = bx > this.bumpX
-        ? ry - this.bumpH * 0.5
-        : bx > this.bumpX - 30
-          ? ry - this.bumpH * 0.5 * ((bx - (this.bumpX - 30)) / 30)
-          : ry;
-      const ballR = 16;
-      ctx.fillStyle = '#222';
-      ctx.strokeStyle = '#555';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(bx, surfaceY - ballR, ballR, 0, Math.PI * 2);
+      ctx.moveTo(this.markerX, my - 8);
+      ctx.lineTo(this.markerX - 7, my - 22);
+      ctx.lineTo(this.markerX + 7, my - 22);
+      ctx.closePath();
       ctx.fill();
-      ctx.stroke();
-      // Finger holes.
-      ctx.fillStyle = '#444';
-      for (let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.arc(bx + i * 5, surfaceY - ballR - 3, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
     }
 
-    // Player figure on the left.
-    ctx.font = '36px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🧍', this.railLeft - 18, ry - 10);
+    // Bowling ball: rolling on the rail, or waiting at the start.
+    const ballR = 17;
+    const waiting = !this.ball && this.attemptsLeft > 0 && !this.done;
+    if (this.ball || waiting) {
+      const bx = this.ball ? this.ball.x : this.railLeft + 18;
+      const by = this._surfaceY(bx) - ballR - 2;
+      this._drawBowlingBall(ctx, bx, by, ballR, bx / ballR);
+    }
 
-    // Win zone indicator on far side.
-    const zoneLeft = this.bumpX + 20;
-    const zoneRight = this.railRight - 20;
-    ctx.fillStyle = 'rgba(61,220,151,0.15)';
-    ctx.fillRect(zoneLeft, ry - this.bumpH - 6, zoneRight - zoneLeft, this.bumpH + 6);
-    ctx.strokeStyle = 'rgba(61,220,151,0.5)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(zoneLeft, ry - this.bumpH - 6, zoneRight - zoneLeft, this.bumpH + 6);
-    ctx.fillStyle = 'rgba(61,220,151,0.8)';
-    ctx.font = '11px system-ui, sans-serif';
+    // Player at the near end.
+    ctx.font = '72px serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('WIN ZONE', (zoneLeft + zoneRight) / 2, ry - this.bumpH / 2 - 3);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('🧍', this.railLeft + 4, ry + 96);
+
+    // Ball-return rack on the floor with the rolls still to come.
+    const rackY = ry + 160, rackX = W / 2;
+    const spare = Math.max(0, this.attemptsLeft - 1);
+    ctx.fillStyle = '#2b2f3a';
+    rr(ctx, rackX - 90, rackY, 180, 16, 8);
+    ctx.fill();
+    ctx.fillStyle = '#9aa3b2';
+    ctx.fillRect(rackX - 84, rackY + 2, 168, 3);
+    for (let i = 0; i < spare; i++) {
+      this._drawBowlingBall(ctx, rackX - 60 + i * 40, rackY - 16, 18, i * 1.7);
+    }
 
     this.particles.render(ctx);
     this._drawHud(ctx);
   }
 
-  _drawRail(ctx) {
-    const ry = this.railY;
-    // Left flat section.
-    ctx.fillStyle = '#c8a060';
-    ctx.fillRect(this.railLeft, ry - 10, this.bumpX - this.railLeft, 10);
-    // Right elevated section (raised by bumpH).
-    ctx.fillStyle = '#c8a060';
-    ctx.fillRect(this.bumpX, ry - this.bumpH - 10, this.railRight - this.bumpX, 10);
-    // Rail edges.
-    ctx.strokeStyle = '#8b6343';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(this.railLeft, ry - 10, this.bumpX - this.railLeft, 10);
-    ctx.strokeRect(this.bumpX, ry - this.bumpH - 10, this.railRight - this.bumpX, 10);
-  }
-
-  _drawBump(ctx) {
-    const ry = this.railY;
-    // Curved ramp shape.
-    ctx.fillStyle = '#b08040';
+  _drawBowlingBall(ctx, x, y, r, spin) {
+    const g = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+    g.addColorStop(0, '#5a7bff');
+    g.addColorStop(0.5, '#2a3fb0');
+    g.addColorStop(1, '#141c5a');
+    ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(this.bumpX - 30, ry);
-    ctx.quadraticCurveTo(this.bumpX, ry - this.bumpH * 1.1, this.bumpX + 30, ry - this.bumpH);
-    ctx.lineTo(this.bumpX + 30, ry - this.bumpH - 10);
-    ctx.lineTo(this.bumpX, ry - this.bumpH * 1.1 - 10);
-    ctx.lineTo(this.bumpX - 30, ry - 10);
-    ctx.closePath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#8b6343';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // Finger holes rotate as it rolls.
+    ctx.fillStyle = '#0a0f30';
+    for (const [a, d] of [[0, 0.45], [0.5, 0.5], [-0.5, 0.5]]) {
+      const ang = spin + a - Math.PI / 2;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(ang) * r * d, y + Math.sin(ang) * r * d, r * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.35, y - r * 0.42, r * 0.3, r * 0.16, -0.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   getResult() {

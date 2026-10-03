@@ -1,7 +1,7 @@
 // Basket Toss: throw a softball so it bounces off an angled wooden board and
 // lands in the basket. Swipe UP (with optional lateral lean) to throw. 3 tries.
 import { MiniGame } from './MiniGame.js';
-import { drawSpace } from '../ui/Backdrop.js';
+import { drawBoothBack, drawFloor, drawPrizeShelf, drawSign, contactShadow, rr } from '../ui/BoothStage.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
@@ -135,98 +135,144 @@ export class BasketToss extends MiniGame {
 
   render(ctx) {
     const W = this.view.w, H = this.view.h;
-    drawSpace(ctx, W, H, this.t);
+    const t = this.t || 0;
+    const groundY = H * 0.78;
+    drawBoothBack(ctx, W, H, 'orange', t);
+    drawFloor(ctx, W, groundY, H);
+    drawPrizeShelf(ctx, 30, W - 30, H * 0.2, ['🐻', '🦒', '🧺', '🐙', '🦊', '🐧'], 32);
 
-    // Ground.
-    ctx.fillStyle = '#3a2e20';
-    ctx.fillRect(0, H * 0.78, W, H * 0.22);
-
-    // Angled wooden board.
+    // Angled backboard on a stand.
     const { boardA: A, boardB: B } = this;
-    ctx.strokeStyle = '#c8a060';
-    ctx.lineWidth = 14;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(A.x, A.y);
-    ctx.lineTo(B.x, B.y);
-    ctx.stroke();
-    ctx.strokeStyle = '#8b6343';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    // Board support leg.
-    ctx.strokeStyle = '#7a5530';
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'square';
+    contactShadow(ctx, B.x, groundY + 4, 40, 7, 0.35);
+    ctx.strokeStyle = '#5a2c0c';
+    ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(B.x, B.y);
-    ctx.lineTo(B.x, H * 0.78);
+    ctx.lineTo(B.x - 6, groundY);
+    ctx.moveTo((A.x + B.x) / 2 + 10, (A.y + B.y) / 2);
+    ctx.lineTo(B.x + 26, groundY);
     ctx.stroke();
-
-    // Basket.
-    const bx = this.basketX, by = this.basketY;
-    ctx.strokeStyle = '#c8a060';
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    // Rim.
-    ctx.beginPath();
-    ctx.ellipse(bx, by, this.basketR, 8, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    // Net lines.
-    ctx.strokeStyle = '#a08048';
+    const ang = Math.atan2(B.y - A.y, B.x - A.x);
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    ctx.save();
+    ctx.translate(A.x, A.y);
+    ctx.rotate(ang);
+    const bg = ctx.createLinearGradient(0, -12, 0, 12);
+    bg.addColorStop(0, '#f2c27f');
+    bg.addColorStop(1, '#b8742f');
+    ctx.fillStyle = bg;
+    rr(ctx, -4, -9, len + 8, 18, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#7a4416';
     ctx.lineWidth = 2;
-    for (let i = -1; i <= 1; i++) {
-      ctx.beginPath();
-      ctx.moveTo(bx + i * this.basketR * 0.7, by + 4);
-      ctx.lineTo(bx + i * this.basketR * 0.3, by + 28);
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.moveTo(bx - this.basketR * 0.6, by + 16);
-    ctx.lineTo(bx + this.basketR * 0.6, by + 16);
+    rr(ctx, -4, -9, len + 8, 18, 4);
     ctx.stroke();
-    // Back of basket.
-    ctx.strokeStyle = '#c8a060';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(bx - this.basketR, by + 4);
-    ctx.lineTo(bx - this.basketR * 0.3, by + 32);
-    ctx.lineTo(bx + this.basketR * 0.3, by + 32);
-    ctx.lineTo(bx + this.basketR, by + 4);
-    ctx.stroke();
+    // Painted aim stripes.
+    ctx.fillStyle = '#e0303e';
+    ctx.fillRect(len * 0.35, -9, len * 0.3, 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(len * 0.45, -9, len * 0.1, 18);
+    ctx.restore();
 
-    // Throw zone marker.
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(this.throwX, this.throwY, 20, 0, Math.PI * 2);
-    ctx.stroke();
+    // Bushel basket.
+    this._drawBasket(ctx, this.basketX, this.basketY, this.basketR, groundY);
 
-    // Ball.
-    if (this.ball) {
-      const br = 13;
-      ctx.fillStyle = '#e8c878';
-      ctx.strokeStyle = '#c8a050';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(this.ball.x, this.ball.y, br, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      // Seam lines.
-      ctx.strokeStyle = '#c87038';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(this.ball.x + br * 0.3, this.ball.y, br * 0.7, -Math.PI * 0.6, Math.PI * 0.6);
-      ctx.stroke();
-    }
+    drawSign(ctx, W / 2, H * 0.2 - 92, 'BANK IT IN THE BASKET!', '#ffcf3f', '#9a3d0c', 14);
+
+    // Bucket of softballs by the thrower.
+    const bkx = this.throwX + 34, bky = groundY;
+    const left = this.attemptsLeft - (this.ball ? 1 : 0);
+    for (let i = 0; i < left; i++) this._drawSoftball(ctx, bkx - 8 + i * 9, bky - 30 - (i % 2) * 4, 9);
+    ctx.fillStyle = '#9aa3b2';
+    ctx.beginPath();
+    ctx.moveTo(bkx - 18, bky - 28);
+    ctx.lineTo(bkx + 26, bky - 28);
+    ctx.lineTo(bkx + 20, bky);
+    ctx.lineTo(bkx - 12, bky);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#c9d0db';
+    ctx.fillRect(bkx - 18, bky - 28, 44, 4);
 
     // Thrower.
-    ctx.font = '32px serif';
+    ctx.font = '56px serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🧑', this.throwX, H * 0.70);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('🧑', this.throwX - 4, groundY + 4);
+
+    // Ball in flight.
+    if (this.ball) this._drawSoftball(ctx, this.ball.x, this.ball.y, 13);
 
     this.particles.render(ctx);
     this._drawHud(ctx);
+  }
+
+  _drawSoftball(ctx, x, y, r) {
+    const g = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+    g.addColorStop(0, '#fff7b0');
+    g.addColorStop(1, '#d8c23a');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#d6283a';
+    ctx.lineWidth = Math.max(1, r * 0.12);
+    ctx.beginPath();
+    ctx.arc(x - r * 1.3, y, r, -0.6, 0.6);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + r * 1.3, y, r, Math.PI - 0.6, Math.PI + 0.6);
+    ctx.stroke();
+  }
+
+  _drawBasket(ctx, bx, by, r, groundY) {
+    const topW = r * 1.25, botW = r * 0.8, bot = groundY - 2;
+    contactShadow(ctx, bx, groundY + 3, topW, 6, 0.35);
+    // Body (woven slats).
+    const g = ctx.createLinearGradient(bx - topW, 0, bx + topW, 0);
+    g.addColorStop(0, '#9a5a24');
+    g.addColorStop(0.5, '#e8b46a');
+    g.addColorStop(1, '#8a4a18');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(bx - topW, by);
+    ctx.lineTo(bx + topW, by);
+    ctx.lineTo(bx + botW, bot);
+    ctx.lineTo(bx - botW, bot);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,44,12,0.55)';
+    ctx.lineWidth = 1.5;
+    for (let k = 1; k < 6; k++) {
+      const u = k / 6;
+      ctx.beginPath();
+      ctx.moveTo(bx - topW + (topW - botW) * u, by + (bot - by) * u);
+      ctx.lineTo(bx + topW - (topW - botW) * u, by + (bot - by) * u);
+      ctx.stroke();
+    }
+    for (let k = -2; k <= 2; k++) {
+      ctx.beginPath();
+      ctx.moveTo(bx + k * topW * 0.4, by);
+      ctx.lineTo(bx + k * botW * 0.4, bot);
+      ctx.stroke();
+    }
+    // Red band + rim with dark opening.
+    ctx.fillStyle = '#e0303e';
+    ctx.beginPath();
+    ctx.moveTo(bx - topW * 0.95, by + 10);
+    ctx.lineTo(bx + topW * 0.95, by + 10);
+    ctx.lineTo(bx + topW * 0.92, by + 16);
+    ctx.lineTo(bx - topW * 0.92, by + 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#3a1a08';
+    ctx.beginPath();
+    ctx.ellipse(bx, by, topW, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#c98e4a';
+    ctx.lineWidth = 4;
+    ctx.stroke();
   }
 
   getResult() {
