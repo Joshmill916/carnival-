@@ -66,7 +66,7 @@ function grabAt(g, tx, ty) {
     const easy = g.prizes.find((p) => p.pts === 2);
     if (!easy) continue;
     const before = g.score;
-    grabAt(g, easy.x, easy.y - 10);
+    grabAt(g, easy.x, easy.y - 30); // grab point sits 30px below the hub
     if (g.score > before) won = true;
   }
   ok(won, 'a well-centred grab on an easy prize can win');
