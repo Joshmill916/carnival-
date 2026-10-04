@@ -1,12 +1,21 @@
-// High Striker (strongman): swipe UP hard to drive the puck up the tower. A
-// stronger swipe sends it higher; reach the very top to RING THE BELL for the
-// max score. 3 swings. The harder the flick, the higher the puck flies.
+// High Striker (strongman) — a TIMING game, like the real thing where it's
+// technique, not muscle. A marker sweeps back and forth across the swing
+// meter; tap (or swipe) to bring the mallet down. Hit the narrow gold zone and
+// the puck rings the bell; the further off you are, the weaker the strike.
+// 3 swings, and the marker gets faster each time.
 import { MiniGame } from './MiniGame.js';
 import { drawDusk, rr, contactShadow } from '../ui/BoothStage.js';
 import { Audio } from '../core/Audio.js';
 import { clamp } from '../core/util.js';
 
 // Colored zones up the tower, low → high, with the score you get for reaching them.
+// Swing meter tuning.
+const SWEEP_SPEEDS = [0.9, 1.25, 1.65]; // full sweeps of the bar per second, per swing
+const PERFECT = 0.035;                  // half-width of the gold zone (fraction of the bar)
+const GOOD = 0.12;                      // half-width of the green zone
+const SWING_TIME = 0.14;                // mallet travel time from tap to impact
+const HINT = 'Tap when the marker hits GOLD! 🔨';
+
 const ZONES = [
   { color: '#5b8cff', label: 'Try Again' },
   { color: '#3ddc97', label: 'Not Bad' },
@@ -21,7 +30,7 @@ export class HighStriker extends MiniGame {
 
   init() {
     this.attemptsLeft = 3;
-    this.hint = 'Swipe UP hard to ring the bell! 🔔';
+    this.hint = HINT;
     const W = this.view.w, H = this.view.h;
     this.cx = W / 2;
     this.top = H * 0.2;         // bell sits here
@@ -36,15 +45,35 @@ export class HighStriker extends MiniGame {
     this.peakFrac = 0;          // best fraction reached this round (for the marker)
     this.rang = false;          // rang the bell at least once
     this.bellT = 0;             // bell flash timer
+    // Swing meter: marker position 0..1, sweeping back and forth.
+    this.meter = 0;
+    this.meterDir = 1;
+    this.sweet = 0.5;           // centre of the gold zone (moves each swing)
+    this.malletT = 0;           // 0 = raised, 1 = struck
+    this.strike = null;         // { power, label } while the mallet is coming down
   }
 
   handleInput(input) {
     if (this.phase !== 'aim') return;
     const g = input.consumeGesture();
-    if (g && g.type === 'flick' && g.vy < -150) {
-      const power = clamp((Math.abs(g.vy) - 250) / 2000, 0.06, 1);
-      this._swing(power);
-    }
+    if (g && (g.type === 'tap' || g.type === 'flick')) this._startSwing();
+  }
+
+  // How good was the timing? Gold = full power (rings the bell); otherwise
+  // power falls off with distance from the gold zone, capped below a ring.
+  _timingPower(d) {
+    if (d <= PERFECT) return { power: 1, label: 'PERFECT!', color: '#ffd14d' };
+    const power = clamp(0.92 - (d - PERFECT) * 2.1, 0.12, 0.92);
+    if (d <= GOOD) return { power, label: 'GREAT!', color: '#3ddc97' };
+    if (d <= 0.25) return { power, label: 'OK', color: '#ffffff' };
+    return { power, label: 'WEAK…', color: '#ff8f8f' };
+  }
+
+  _startSwing() {
+    this.strike = this._timingPower(Math.abs(this.meter - this.sweet));
+    this.phase = 'swing';
+    this.malletT = 0;
+    this.hint = '';
   }
 
   _swing(power) {
@@ -57,6 +86,27 @@ export class HighStriker extends MiniGame {
   update(dt) {
     super.update(dt);
     if (this.bellT > 0) this.bellT -= dt;
+
+    if (this.phase === 'aim') {
+      // Ping-pong the marker across the meter.
+      const speed = SWEEP_SPEEDS[Math.min(this.attempts, SWEEP_SPEEDS.length - 1)];
+      this.meter += this.meterDir * speed * dt;
+      if (this.meter >= 1) { this.meter = 2 - this.meter; this.meterDir = -1; }
+      if (this.meter <= 0) { this.meter = -this.meter; this.meterDir = 1; }
+      this.malletT = Math.max(0, this.malletT - dt * 4);
+      return;
+    }
+    if (this.phase === 'swing') {
+      this.malletT = Math.min(1, this.malletT + dt / SWING_TIME);
+      if (this.malletT >= 1) {
+        const s = this.strike;
+        this.particles.text(this.cx, this.bottom - 30, s.label, s.color, s.power >= 1 ? 28 : 22);
+        this.particles.burst(this.cx, this.bottom + 18, '#ffe9a8', s.power >= 1 ? 20 : 10, 200);
+        Audio.thud();
+        this._swing(s.power);
+      }
+      return;
+    }
     if (this.phase !== 'fly' || !this.puck) return;
     const p = this.puck;
     p.vy += this.g * dt;
@@ -104,7 +154,11 @@ export class HighStriker extends MiniGame {
       this.phase = 'done';
     } else {
       this.phase = 'aim';
-      this.hint = 'Swipe UP hard to ring the bell! 🔔';
+      this.hint = HINT;
+      // New swing: the gold zone moves and the marker restarts from the left.
+      this.sweet = 0.3 + this.rng() * 0.4;
+      this.meter = 0;
+      this.meterDir = 1;
     }
   }
 
@@ -211,7 +265,13 @@ export class HighStriker extends MiniGame {
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillRect(cx - 26, baseY - 7, 52, 2);
-    this._drawMallet(ctx, cx - 92, baseY + 18, this.phase === 'fly' ? -0.2 : -0.75);
+    // Mallet: held up overhead while you time it, then slammed onto the pad.
+    const raised = -0.55 + Math.sin(t * 3) * 0.04;
+    const struck = 1.43;
+    const k = this.malletT;
+    this._drawMallet(ctx, cx - 95, baseY + 14, raised + (struck - raised) * k * k);
+
+    this._drawMeter(ctx, W, baseY + 40);
 
     this.particles.render(ctx);
     this._drawHud(ctx);
@@ -276,6 +336,40 @@ export class HighStriker extends MiniGame {
     ctx.beginPath();
     ctx.arc(Math.sin(t * 3) * (lit ? 6 : 0), 46, 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  // The swing meter: red ends, green zone, narrow gold zone, sliding marker.
+  _drawMeter(ctx, W, y) {
+    const x0 = 40, x1 = W - 40, w = x1 - x0, h = 18;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,8,30,0.8)';
+    rr(ctx, x0 - 8, y - 8, w + 16, h + 16, 12);
+    ctx.fill();
+    const grad = ctx.createLinearGradient(x0, 0, x1, 0);
+    grad.addColorStop(0, '#ff5d5d');
+    grad.addColorStop(0.5, '#ffb04d');
+    grad.addColorStop(1, '#ff5d5d');
+    ctx.fillStyle = grad;
+    rr(ctx, x0, y, w, h, 9);
+    ctx.fill();
+    ctx.fillStyle = '#3ddc97';
+    ctx.fillRect(x0 + (this.sweet - GOOD) * w, y, GOOD * 2 * w, h);
+    ctx.fillStyle = '#ffd14d';
+    ctx.fillRect(x0 + (this.sweet - PERFECT) * w, y - 3, PERFECT * 2 * w, h + 6);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + (this.sweet - PERFECT) * w, y - 3, PERFECT * 2 * w, h + 6);
+    // Marker.
+    const mx = x0 + this.meter * w;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(mx, y - 2);
+    ctx.lineTo(mx - 9, y - 14);
+    ctx.lineTo(mx + 9, y - 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(mx - 2, y - 2, 4, h + 4);
     ctx.restore();
   }
 
