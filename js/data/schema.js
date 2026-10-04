@@ -1,5 +1,6 @@
 // The single source of truth for the saved game shape, its version, and migration.
 import { clone, deepMergeDefaults } from '../core/util.js';
+import { SPAWN, LAYOUT_VERSION } from './defs.js';
 
 export const SCHEMA_VERSION = 2;
 export const SAVE_KEY = 'carnival.save.v1';
@@ -21,7 +22,8 @@ export function defaultState() {
     },
     player: {
       name: 'Player',
-      pos: { x: 600, y: 640 }, // spawn on the central plaza (map y is world z in 3D)
+      pos: { x: SPAWN.x, y: SPAWN.y }, // spawn on the central plaza (map y is world z in 3D)
+      layoutV: LAYOUT_VERSION, // saves from an older layout get moved back to SPAWN
       facing: 'up', // 4-way enum, used by the 2D fallback map
       yaw: 0,       // free rotation, used by the 3D overworld
     },
@@ -74,6 +76,14 @@ export function migrate(raw) {
     delete s.upgrades;
     delete s.store;
     s.version = 2;
+  }
+
+  // The fairground was relaid out: put the player back on the plaza rather
+  // than at an old coordinate that may now be inside a tent.
+  if (s.player && s.player.layoutV !== LAYOUT_VERSION) {
+    s.player.pos = { x: SPAWN.x, y: SPAWN.y };
+    s.player.yaw = 0;
+    s.player.layoutV = LAYOUT_VERSION;
   }
 
   s = deepMergeDefaults(s, defaultState());
