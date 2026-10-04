@@ -23,7 +23,7 @@ const CAM_LOOK_AHEAD = 170; // ...and out ahead of him, so he sits low on screen
                             // and you can see where you're running
 const CAM_SMOOTH = 9;     // vertical/positional smoothing
 
-const JUMP_BTN = { w: 108, h: 108, margin: 26 };
+const CAM_BTN = { w: 96, h: 96, margin: 26 };
 
 export class World3DScene extends Scene {
   onEnter() {
@@ -46,8 +46,9 @@ export class World3DScene extends Scene {
     this.walkPhase = 0;
     this.t = 0;
     this._jumpWasDown = false;
-    this._jumpBtn = this._layoutJumpBtn();
-    g.input.setButtons([{ id: 'jump', ...this._jumpBtn }]);
+    this._orbitKeyWasDown = false;
+    this._camBtn = this._layoutCamBtn();
+    g.input.setButtons([{ id: 'cam', ...this._camBtn }]);
   }
 
   onResume(result) {
@@ -55,8 +56,8 @@ export class World3DScene extends Scene {
     g.input.setMode('move');
     g.hud.show();
     this._syncVisible(true);
-    this._jumpBtn = this._layoutJumpBtn();
-    g.input.setButtons([{ id: 'jump', ...this._jumpBtn }]);
+    this._camBtn = this._layoutCamBtn();
+    g.input.setButtons([{ id: 'cam', ...this._camBtn }]);
     if (this.sim) {
       this.sim.level = g.state.s.progress.level;
       // Re-latch so backing out of a booth doesn't instantly reopen it.
@@ -66,7 +67,7 @@ export class World3DScene extends Scene {
 
   // A modal (booth prompt, store, settings) floats over the live world, so the
   // 3D canvas stays up — we just stop drawing our touch controls under it and
-  // release the JUMP button so stray taps don't reach us.
+  // release the camera button so stray taps don't reach us.
   onPause() {
     this._paused = true;
     this.game.input.setButtons([]);
@@ -84,13 +85,13 @@ export class World3DScene extends Scene {
     this._paused = !on;
   }
 
-  _layoutJumpBtn() {
+  _layoutCamBtn() {
     const r = this.game.renderer;
     return {
-      x: r.width - JUMP_BTN.w - JUMP_BTN.margin,
-      y: r.height - JUMP_BTN.h - JUMP_BTN.margin - 8,
-      w: JUMP_BTN.w,
-      h: JUMP_BTN.h,
+      x: r.width - CAM_BTN.w - CAM_BTN.margin,
+      y: r.height - CAM_BTN.h - CAM_BTN.margin - 8,
+      w: CAM_BTN.w,
+      h: CAM_BTN.h,
     };
   }
 
@@ -132,10 +133,14 @@ export class World3DScene extends Scene {
     const g = this.game;
     const input = g.input;
 
-    // Jump is edge-triggered: the button press, or Space/W on a keyboard.
+    // The on-screen button swings the camera 90° round you; Q/E do the same
+    // on a keyboard. Jumping stays on Space/Enter for keyboard players.
+    if (input.consumeButton && input.consumeButton('cam')) this.sim.orbitCamera(Math.PI / 2);
+    const orbitKey = input.keys.has('e') ? 1 : input.keys.has('q') ? -1 : 0;
+    if (orbitKey && !this._orbitKeyWasDown) this.sim.orbitCamera((orbitKey * Math.PI) / 2);
+    this._orbitKeyWasDown = !!orbitKey;
     const keyJump = input.keys.has(' ') || input.keys.has('enter');
-    const btnJump = input.consumeButton ? input.consumeButton('jump') : false;
-    const jump = btnJump || (keyJump && !this._jumpWasDown);
+    const jump = keyJump && !this._jumpWasDown;
     this._jumpWasDown = keyJump;
 
     const ev = this.sim.step(dt, {
@@ -149,7 +154,7 @@ export class World3DScene extends Scene {
     this.walkPhase += (p.speed / RUN_SPEED) * dt * 14;
 
     this._updateNpcs(dt);
-    this.world.update(dt, this.t, this.sim.level);
+    this.world.update(dt, this.t, this.sim.level, this.sim.rider);
     this._updateVisuals();
     this._updateCamera(dt);
     this._persist();
@@ -310,7 +315,7 @@ export class World3DScene extends Scene {
     if (this._paused) return;
     this.fx.render(ctx);
     this._drawJoystick(ctx);
-    this._drawJumpBtn(ctx);
+    this._drawCamBtn(ctx);
   }
 
   _drawJoystick(ctx) {
@@ -333,27 +338,49 @@ export class World3DScene extends Scene {
     ctx.restore();
   }
 
-  _drawJumpBtn(ctx) {
-    const b = this._jumpBtn;
+  // Round button with a little camera and a curved "swing round" arrow.
+  _drawCamBtn(ctx) {
+    const b = this._camBtn;
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    const held = this.game.input.isButtonDown && this.game.input.isButtonDown('jump');
+    const held = this.game.input.isButtonDown && this.game.input.isButtonDown('cam');
+    const r = b.w / 2 - (held ? 4 : 0);
     ctx.save();
-    ctx.globalAlpha = held ? 0.95 : 0.72;
-    ctx.fillStyle = '#ff5d8f';
+    ctx.globalAlpha = held ? 0.95 : 0.8;
+    ctx.fillStyle = '#2b2f3a';
     ctx.beginPath();
-    ctx.arc(cx, cy, b.w / 2 - (held ? 4 : 0), 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, cy, b.w / 2 - 8, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = '800 22px "Trebuchet MS", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('JUMP', cx, cy + 1);
+    // Camera body + lens.
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(cx - 17, cy - 13, 34, 22, 5);
+    ctx.fill();
+    ctx.fillRect(cx - 7, cy - 17, 14, 5);
+    ctx.fillStyle = '#2b2f3a';
+    ctx.beginPath();
+    ctx.arc(cx, cy - 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+    // Swing-round arrow under it.
+    ctx.strokeStyle = '#ffd14d';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 15, 22, 7, 0, Math.PI * 0.15, Math.PI * 0.95);
+    ctx.stroke();
+    const ax = cx - 21, ay = cy + 13;
+    ctx.fillStyle = '#ffd14d';
+    ctx.beginPath();
+    ctx.moveTo(ax - 4, ay - 6);
+    ctx.lineTo(ax + 6, ay - 3);
+    ctx.lineTo(ax - 2, ay + 5);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 

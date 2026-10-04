@@ -203,3 +203,20 @@ export const LEVELS = [
   { level: 7, need: 4400, unlock: 'All games unlocked! Double the fun 🎪' },
   { level: 8, need: 7000, unlock: 'Fair Champion status 👑' },
 ];
+
+// Where a ride sits and which way it faces, shared by the 3D art and the ride
+// physics so you ride exactly where the wheel is drawn. Rides face the plaza.
+// The Ferris wheel turns in its local X/Y plane: `ax/az` is the wheel's local
+// X axis on the ground, `nx/nz` the direction it faces (toward the plaza).
+export function rideFrame(ride) {
+  const yaw = Math.atan2(PLAZA.x - ride.x, PLAZA.y - ride.y);
+  const R = ride.r * 0.9;
+  return {
+    yaw,
+    ax: Math.cos(yaw), az: -Math.sin(yaw),
+    nx: Math.sin(yaw), nz: Math.cos(yaw),
+    R,                   // ferris wheel radius
+    hubY: R + 40,        // ferris axle height
+    horseR: ride.r * 0.66, // carousel horse ring
+  };
+}

@@ -30,7 +30,7 @@ export class Input {
     this._downTime = 0;
     this._pendingGesture = null;
 
-    // On-screen buttons the active scene registers (e.g. the 3D world's JUMP).
+    // On-screen buttons the active scene registers (e.g. the 3D world's camera button).
     // A press that lands inside one of these does NOT plant the floating
     // joystick, so you can jump without also steering.
     this.buttons = [];

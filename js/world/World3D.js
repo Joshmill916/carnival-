@@ -8,7 +8,7 @@
 // the sun (cheap: one shadow map that follows the player).
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  WORLD, BOOTHS, RIDES, FOOD, TREES, LIGHT_LINES, HEIGHTS, PLAZA, FOUNTAIN,
+  WORLD, BOOTHS, RIDES, FOOD, TREES, LIGHT_LINES, HEIGHTS, PLAZA, FOUNTAIN, rideFrame,
 } from '../data/defs.js';
 import { mat, flat, box, cyl, slab } from './mats.js';
 
@@ -649,10 +649,9 @@ export class World3D {
   }
 
   _buildFerris(g, r) {
-    const R = r.r * 0.9;
-    const hubY = R + 40;
+    const { R, hubY, yaw } = rideFrame(r);
     // Faces the plaza so you see the wheel side-on as you walk up.
-    g.rotation.y = Math.atan2(CX - r.x, CZ - r.y);
+    g.rotation.y = yaw;
     g.add(box(R * 1.3, 12, 120, WOOD_DK, 0, 6, 0));
     // A-frame legs, front and back.
     for (const z of [-34, 34]) {
@@ -713,6 +712,7 @@ export class World3D {
 
   _buildCarousel(g, r) {
     const R = r.r;
+    const horseR = rideFrame(r).horseR;
     const platform = stripedCyl(R, R + 4, 16, 24, 0xffd14d, WHITE);
     platform.position.y = 8;
     g.add(platform);
@@ -741,11 +741,12 @@ export class World3D {
     const horses = [];
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2;
-      const x = Math.cos(a) * R * 0.66, z = Math.sin(a) * R * 0.66;
+      const x = Math.cos(a) * horseR, z = Math.sin(a) * horseR;
       spinner.add(cyl(2.5, 2.5, 130, 6, 0xffd14d, x, 85, z));
       const horse = new THREE.Group();
       horse.position.set(x, 56, z);
       horse.rotation.y = -a;
+      horse.userData.a = a;
       const hc = horseColors[i % horseColors.length];
       horse.add(box(12, 16, 36, hc, 0, 0, 0));                 // body
       horse.add(box(10, 18, 10, hc, 0, 12, -18));              // neck
@@ -893,13 +894,46 @@ export class World3D {
   }
 
   // --- per-frame --------------------------------------------------------------
-  update(dt, t, level) {
+  // `rider` is Sim3D's rider state. While you're on a ride, the ride is driven
+  // by your ride angle so you stay in your gondola / on your horse; otherwise
+  // it idles round on its own.
+  update(dt, t, level, rider = null) {
+    const riding = rider && rider.state === 'riding' ? rider : null;
     for (const r of this.rides) {
+      const mine = riding && riding.ride.kind === r.kind;
       if (r.kind === 'ferris') {
-        r.wheel.rotation.z += dt * 0.35;
+        if (mine) {
+          // Lock onto the gondola nearest your seat, then turn the wheel with you.
+          if (r.lockA == null) {
+            let best = r.cabins[0], bd = Infinity;
+            for (const c of r.cabins) {
+              const d = Math.abs(Math.atan2(Math.sin(c.a + r.wheel.rotation.z - riding.angle), Math.cos(c.a + r.wheel.rotation.z - riding.angle)));
+              if (d < bd) { bd = d; best = c; }
+            }
+            r.lockA = best.a;
+          }
+          r.wheel.rotation.z = riding.angle - r.lockA;
+        } else {
+          r.lockA = null;
+          r.wheel.rotation.z += dt * 0.35;
+        }
         for (const c of r.cabins) c.mesh.rotation.z = -r.wheel.rotation.z;
       } else {
-        r.spinner.rotation.y += dt * 0.6;
+        if (mine) {
+          // A horse at base angle a sits at world angle (a - spin).
+          if (r.lockA == null) {
+            let best = r.horses[0], bd = Infinity;
+            for (const h of r.horses) {
+              const d = Math.abs(Math.atan2(Math.sin(h.userData.a - r.spinner.rotation.y - riding.angle), Math.cos(h.userData.a - r.spinner.rotation.y - riding.angle)));
+              if (d < bd) { bd = d; best = h; }
+            }
+            r.lockA = best.userData.a;
+          }
+          r.spinner.rotation.y = r.lockA - riding.angle;
+        } else {
+          r.lockA = null;
+          r.spinner.rotation.y += dt * 0.6;
+        }
         r.horses.forEach((h, i) => { h.position.y = 56 + Math.sin(t * 3 + i * 1.3) * 10; });
       }
     }
