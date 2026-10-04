@@ -139,6 +139,21 @@ export const TREES = [
   { x: sp(940), y: sp(1100) }, { x: sp(1260), y: sp(820) }, { x: sp(140), y: sp(780) },
 ];
 
+// Things to jump on. Each is a solid block you can't walk through but can
+// land on top of: `top` is its height, `s` its half-width. Laid out as hay-bale
+// staircases (each step is one plain jump up from the last) topped by a crate
+// tower that needs a double jump. Placed on open lawn by the north fence.
+function haySteps(cx, cz, dir) {
+  return [
+    { x: cx - dir * 120, y: cz, s: 34, top: 40, kind: 'hay' },
+    { x: cx - dir * 50, y: cz, s: 34, top: 80, kind: 'hay' },
+    { x: cx + dir * 20, y: cz, s: 34, top: 120, kind: 'hay' },
+    { x: cx + dir * 92, y: cz + 4, s: 36, top: 160, kind: 'crate' },
+    { x: cx + dir * 92, y: cz - 120, s: 30, top: 60, kind: 'barrel' },
+  ];
+}
+export const PLATFORMS = [...haySteps(790, 240, 1), ...haySteps(1490, 240, -1)];
+
 // String-light runs: each is a list of pole anchor points lights are strung between.
 export const LIGHT_LINES = [
   // Placed in open lawn between the booth rows, clear of every path.
