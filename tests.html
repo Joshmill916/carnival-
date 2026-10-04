@@ -32,6 +32,7 @@
     const { makeRng } = await import('./js/core/util.js');
     const { RingToss } = await import('./js/games/RingToss.js');
     const { HighStriker } = await import('./js/games/HighStriker.js');
+    const { BottleKnockdown } = await import('./js/games/BottleKnockdown.js');
     const { ClawMachine } = await import('./js/games/ClawMachine.js');
     const { BBGunStar } = await import('./js/games/BBGunStar.js');
     const { RailBowling } = await import('./js/games/RailBowling.js');
@@ -72,19 +73,35 @@
     ok(JSON.stringify(runRing(42)) === JSON.stringify(runRing(42)), 'same seed + input → identical result');
     ok(runRing(42).attempts === 3, 'ring toss uses all 3 rings');
 
-    grp('High Striker — full-power swipes ring the bell');
-    const runStriker = (seed) => {
+    grp('Milk Bottles — bottles really topple and fall');
+    const throwBottles = (vy) => {
+      const g = new BottleKnockdown({ w: 390, h: 844 }, makeRng(3));
+      g.init();
+      let c=false;
+      g.handleInput({ drag:{active:false}, consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy,dx:0,dy:-160}) });
+      let guard = 0;
+      while (g.phase !== 'aim' && !g.done && guard++ < 600) { g.handleInput({ drag:{active:false}, consumeGesture:()=>null }); g.update(1/60); }
+      return g.bottles.filter((b) => b.down).length;
+    };
+    ok(throwBottles(-1000) >= 4, 'a low, centred hit brings most of the pyramid down');
+    ok(throwBottles(-3200) <= 1, 'a throw over the top barely touches it');
+
+    grp('High Striker — timing: gold every swing rings the bell 3 times');
+    const runStriker = (seed, rule) => {
       const g = new HighStriker({ w: 400, h: 700 }, makeRng(seed));
       g.init();
       let guard = 0;
-      while (!g.isDone() && guard++ < 5000) {
-        if (g.phase === 'aim') { let c=false; g.handleInput({ consumeGesture: () => c?null:(c=true,{type:'flick',vx:0,vy:-3000,speed:3000}) }); }
+      while (!g.isDone() && guard++ < 20000) {
+        const tap = g.phase === 'aim' && rule(g);
+        let c=false; g.handleInput({ consumeGesture: () => (tap && !c) ? (c=true,{type:'tap',x:200,y:300}) : null });
         g.update(1/60);
       }
       return g.getResult();
     };
-    ok(runStriker(7).score === 30 && runStriker(7).bigWin, 'max-power swings ring the bell: 30 + bigWin');
-    ok(runStriker(7).attempts === 3, 'high striker uses all 3 swings');
+    const perfect = (g) => Math.abs(g.meter - g.sweet) < 0.02;
+    ok(runStriker(7, perfect).score === 30 && runStriker(7, perfect).bigWin, 'perfectly timed swings ring the bell: 30 + bigWin');
+    ok(runStriker(7, perfect).attempts === 3, 'high striker uses all 3 swings');
+    ok(runStriker(7, () => true).score < 15, 'mashing without timing scores low');
 
     grp('Claw Machine — 2D claw, 5 grabs, a real challenge');
     const runClaw = (seed) => {
