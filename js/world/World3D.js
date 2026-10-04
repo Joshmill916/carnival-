@@ -8,7 +8,7 @@
 // the sun (cheap: one shadow map that follows the player).
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  WORLD, BOOTHS, RIDES, FOOD, TREES, LIGHT_LINES, HEIGHTS, PLAZA, FOUNTAIN, rideFrame,
+  WORLD, BOOTHS, RIDES, FOOD, TREES, LIGHT_LINES, HEIGHTS, PLAZA, FOUNTAIN, PLATFORMS, rideFrame,
 } from '../data/defs.js';
 import { mat, flat, box, cyl, slab } from './mats.js';
 
@@ -224,6 +224,7 @@ export class World3D {
     this._buildFood();
     this._buildTrees();
     this._buildLights();
+    this._buildPlatforms();
     this._buildClouds();
   }
 
@@ -874,6 +875,49 @@ export class World3D {
     }
   }
 
+  // --- hay bales, crates and barrels to jump on --------------------------------
+  // Each platform is drawn as a stack reaching exactly its `top`, so what you
+  // see is what you can stand on.
+  _buildPlatforms() {
+    this.spinners = [];
+    for (const pl of PLATFORMS) {
+      const g = new THREE.Group();
+      g.position.set(pl.x, 0, pl.y);
+      g.rotation.y = hash(pl.x, pl.y) * 0.3 - 0.15;
+      const w = pl.s * 2;
+      if (pl.kind === 'barrel') {
+        g.add(cyl(pl.s, pl.s * 0.9, pl.top, 12, 0xa0622d, 0, pl.top / 2, 0));
+        for (const y of [pl.top * 0.2, pl.top * 0.8]) g.add(cyl(pl.s + 1.5, pl.s + 1.5, 4, 12, 0x5d6676, 0, y, 0));
+        g.add(cyl(pl.s - 3, pl.s - 3, 2, 12, 0x7a4416, 0, pl.top + 0.5, 0));
+      } else {
+        const layers = Math.round(pl.top / 40);
+        const lh = pl.top / layers;
+        for (let i = 0; i < layers; i++) {
+          const y = i * lh + lh / 2;
+          const jitter = (hash(i, pl.x) - 0.5) * 6;
+          if (pl.kind === 'hay') {
+            g.add(box(w, lh - 1, w * 0.86, i % 2 ? 0xe8c45c : 0xdcb44a, jitter, y, 0));
+            for (const tx of [-w * 0.25, w * 0.25]) g.add(box(3, lh, w * 0.88, 0x8a5a24, tx + jitter, y, 0));
+          } else {
+            g.add(box(w, lh - 1, w, i % 2 ? 0xb07a45 : 0xc68a50, jitter, y, 0));
+            g.add(box(w + 1, 5, w + 1, 0x7a4416, jitter, y + lh / 2 - 4, 0));
+            g.add(box(w + 1, 5, w + 1, 0x7a4416, jitter, y - lh / 2 + 4, 0));
+          }
+        }
+        // A spinning gold star on top of each crate tower — the summit.
+        if (pl.kind === 'crate') {
+          const star = new THREE.Mesh(new THREE.OctahedronGeometry(14, 0), mat(0xffd14d));
+          star.position.y = pl.top + 40;
+          star.userData.baseY = pl.top + 40;
+          g.add(star);
+          this.spinners.push(star);
+        }
+      }
+      shadowy(g, true, true);
+      this.scene.add(g);
+    }
+  }
+
   _buildClouds() {
     const geo = new THREE.IcosahedronGeometry(1, 1);
     const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x9aa8b8, flatShading: true });
@@ -954,6 +998,8 @@ export class World3D {
       const rr = 14 + u * 62;
       d.position.set(Math.cos(d.userData.a) * rr, 110 + 34 * u - 110 * u * u, Math.sin(d.userData.a) * rr);
     }
+
+    for (const st of this.spinners) { st.rotation.y += dt * 2; st.position.y = st.userData.baseY + Math.sin(t * 2) * 5; }
 
     // Clouds drift and wrap around.
     for (const c of this.clouds) {

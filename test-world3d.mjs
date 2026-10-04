@@ -292,6 +292,68 @@ function walkUntilBooth(sim, input, budget = 240) {
   ok(Math.abs(Math.abs(turned) - Math.PI / 2) < 0.05, `camera button swings the view 90° (${Math.round(turned * 180 / Math.PI)}°)`);
 }
 
+// --- 10d. Jumping on things --------------------------------------------------
+{
+  const { PLATFORMS, FOUNTAIN } = await import('./js/data/defs.js');
+  const { STOMP_V, STOMPS_TO_SQUASH, FOUNTAIN_TOPS } = await import('./js/world/Sim3D.js');
+  const steps = PLATFORMS.slice(0, 4); // one hay staircase: tops 40, 80, 120, 160
+
+  // Can't walk through a hay bale at ground level.
+  const wall = new Sim3D({ x: steps[0].x - 120, z: steps[0].y });
+  for (let i = 0; i < 120; i++) { wall.step(DT, {}); wall.player.vx = 250; }
+  ok(wall.player.x < steps[0].x - steps[0].s, 'hay bales are solid when you walk into them');
+
+  // Hop up the staircase: drop the player just above each step's top, at
+  // its centre, and check he lands and stands on it.
+  let stood = true;
+  for (const st of steps) {
+    const sim = new Sim3D({ x: st.x, z: st.y });
+    sim.player.y = st.top + 30; sim.player.grounded = false; sim.player.vy = 0;
+    for (let i = 0; i < 60; i++) sim.step(DT, {});
+    if (!(sim.player.grounded && Math.abs(sim.player.y - st.top) < 0.01)) stood = false;
+  }
+  ok(stood, 'you land on and stand on every step (40/80/120/160 high)');
+
+  // Each step is reachable with ONE jump from the one below; the crate tower
+  // (last step) is the one that needs a double jump from the ground.
+  const peak1 = (600 + 20) ** 2 / (2 * 1900); // JUMP_V^2 / 2g, with a touch of slack
+  ok(steps.every((st, i) => st.top - (i ? steps[i - 1].top : 0) < peak1), 'every step is one plain jump up from the last');
+
+  // Run off the edge and you fall back to the ground.
+  const edge = new Sim3D({ x: steps[3].x, z: steps[3].y });
+  edge.player.y = steps[3].top; edge.player.grounded = true;
+  for (let i = 0; i < 90; i++) { edge.step(DT, {}); edge.player.vz = 260; }
+  ok(edge.player.y === 0 && edge.player.grounded, 'walk off the top and you drop back down to the ground');
+
+  // Fountain: two tiers to climb.
+  const f = new Sim3D({ x: FOUNTAIN.x + 70, z: FOUNTAIN.y });
+  f.player.y = 60; f.player.grounded = false;
+  for (let i = 0; i < 60; i++) f.step(DT, {});
+  const f2 = new Sim3D({ x: FOUNTAIN.x + 20, z: FOUNTAIN.y });
+  f2.player.y = 120; f2.player.grounded = false;
+  for (let i = 0; i < 60; i++) f2.step(DT, {});
+  ok(f.player.y === FOUNTAIN_TOPS[0] && f2.player.y === FOUNTAIN_TOPS[1], 'the fountain has a basin rim and an upper bowl to stand on');
+
+  // Stomp: falling onto a head bounces you; rising up through it does not.
+  const head = { x: 1500, z: 620, h: 56 };   // open lawn
+  const s1 = new Sim3D({ x: 1500, z: 620 });
+  s1.player.y = 120; s1.player.grounded = false; s1.player.vy = 0;
+  let hit = -1, guard = 0;
+  while (hit < 0 && guard++ < 120) { s1.step(DT, {}); hit = s1.stomp([head]); }
+  ok(hit === 0 && s1.player.vy === STOMP_V, 'landing on a fair-goer\'s head bounces you off it');
+  const s2 = new Sim3D({ x: 1500, z: 620 });
+  s2.step(DT, { jump: true });
+  let rising = -1;
+  for (let i = 0; i < 6; i++) { s2.step(DT, {}); if (s2.player.vy > 0) rising = Math.max(rising, s2.stomp([head])); }
+  ok(rising === -1, 'jumping up into someone from below does not count');
+  const s3 = new Sim3D({ x: 1500 + 60, z: 620 });
+  s3.player.y = 120; s3.player.grounded = false;
+  let miss = -1;
+  for (let i = 0; i < 120; i++) { s3.step(DT, {}); miss = Math.max(miss, s3.stomp([head])); }
+  ok(miss === -1, 'landing beside them is a miss');
+  ok(STOMPS_TO_SQUASH === 3, 'three stomps squashes them flat');
+}
+
 // --- 11. Obstacles are built from the real fairground ------------------------
 {
   const obs = buildObstacles();

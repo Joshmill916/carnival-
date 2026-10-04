@@ -10,7 +10,7 @@ import { WORLD, NPC_COUNT } from '../data/defs.js';
 import { clamp, makeRng } from '../core/util.js';
 import { Audio } from '../core/Audio.js';
 import { Particles } from '../ui/Particles.js';
-import { Sim3D, RUN_SPEED, CAM_DIST } from '../world/Sim3D.js';
+import { Sim3D, RUN_SPEED, CAM_DIST, STOMPS_TO_SQUASH } from '../world/Sim3D.js';
 import { World3D } from '../world/World3D.js';
 import {
   buildPerson, buildBlobShadow, animatePerson, applySquash,
@@ -23,7 +23,12 @@ const CAM_LOOK_AHEAD = 170; // ...and out ahead of him, so he sits low on screen
                             // and you can see where you're running
 const CAM_SMOOTH = 9;     // vertical/positional smoothing
 
-const CAM_BTN = { w: 96, h: 96, margin: 26 };
+const JUMP_BTN = { w: 104, h: 104, margin: 24 };
+const CAM_BTN = { w: 66, h: 66, gap: 14 }; // sits just above JUMP
+const NPC_HEAD = 56;    // head height of a (scale 0.95) fair-goer — what you stomp on
+const SQUISH_T = 0.35;  // how long a stomped fair-goer stays squished
+const FLAT_T = 1.1;     // how long a flattened one lies there before going poof
+const RESPAWN_T = 5;    // and how long until a new fair-goer wanders in
 
 export class World3DScene extends Scene {
   onEnter() {
@@ -47,8 +52,7 @@ export class World3DScene extends Scene {
     this.t = 0;
     this._jumpWasDown = false;
     this._orbitKeyWasDown = false;
-    this._camBtn = this._layoutCamBtn();
-    g.input.setButtons([{ id: 'cam', ...this._camBtn }]);
+    this._layoutButtons();
   }
 
   onResume(result) {
@@ -56,8 +60,7 @@ export class World3DScene extends Scene {
     g.input.setMode('move');
     g.hud.show();
     this._syncVisible(true);
-    this._camBtn = this._layoutCamBtn();
-    g.input.setButtons([{ id: 'cam', ...this._camBtn }]);
+    this._layoutButtons();
     if (this.sim) {
       this.sim.level = g.state.s.progress.level;
       // Re-latch so backing out of a booth doesn't instantly reopen it.
@@ -85,14 +88,22 @@ export class World3DScene extends Scene {
     this._paused = !on;
   }
 
-  _layoutCamBtn() {
+  // Big JUMP in the thumb corner, the smaller camera button just above it.
+  _layoutButtons() {
     const r = this.game.renderer;
-    return {
-      x: r.width - CAM_BTN.w - CAM_BTN.margin,
-      y: r.height - CAM_BTN.h - CAM_BTN.margin - 8,
+    this._jumpBtn = {
+      x: r.width - JUMP_BTN.w - JUMP_BTN.margin,
+      y: r.height - JUMP_BTN.h - JUMP_BTN.margin - 8,
+      w: JUMP_BTN.w,
+      h: JUMP_BTN.h,
+    };
+    this._camBtn = {
+      x: this._jumpBtn.x + (JUMP_BTN.w - CAM_BTN.w) / 2,
+      y: this._jumpBtn.y - CAM_BTN.h - CAM_BTN.gap,
       w: CAM_BTN.w,
       h: CAM_BTN.h,
     };
+    this.game.input.setButtons([{ id: 'jump', ...this._jumpBtn }, { id: 'cam', ...this._camBtn }]);
   }
 
   _buildWorld() {
@@ -123,6 +134,7 @@ export class World3DScene extends Scene {
         x, z, tx: x, tz: z, rig, shadow,
         speed: rng.range(18, 38), pause: rng.range(0, 3),
         phase: rng.range(0, Math.PI * 2), _rng: rng,
+        hits: 0, squishT: 0, flatT: 0, gone: false, respawnT: 0, popT: 0,
       });
     }
   }
@@ -133,14 +145,15 @@ export class World3DScene extends Scene {
     const g = this.game;
     const input = g.input;
 
-    // The on-screen button swings the camera 90° round you; Q/E do the same
-    // on a keyboard. Jumping stays on Space/Enter for keyboard players.
+    // The camera button swings the view 90° round you (Q/E on a keyboard).
     if (input.consumeButton && input.consumeButton('cam')) this.sim.orbitCamera(Math.PI / 2);
     const orbitKey = input.keys.has('e') ? 1 : input.keys.has('q') ? -1 : 0;
     if (orbitKey && !this._orbitKeyWasDown) this.sim.orbitCamera((orbitKey * Math.PI) / 2);
     this._orbitKeyWasDown = !!orbitKey;
+    // Jump is edge-triggered: the JUMP button, or Space/Enter on a keyboard.
     const keyJump = input.keys.has(' ') || input.keys.has('enter');
-    const jump = keyJump && !this._jumpWasDown;
+    const btnJump = input.consumeButton ? input.consumeButton('jump') : false;
+    const jump = btnJump || (keyJump && !this._jumpWasDown);
     this._jumpWasDown = keyJump;
 
     const ev = this.sim.step(dt, {
@@ -149,6 +162,7 @@ export class World3DScene extends Scene {
       jump,
     });
     this._handleEvents(ev);
+    this._checkStomp();
 
     const p = this.sim.player;
     this.walkPhase += (p.speed / RUN_SPEED) * dt * 14;
@@ -216,8 +230,71 @@ export class World3DScene extends Scene {
     if (s) this.fx.text(s.x, s.y, msg, color, 18);
   }
 
+  // Land on a fair-goer's head and you bounce off; the third stomp squashes
+  // them flat like a Goomba.
+  _checkStomp() {
+    const targets = this.npcs.map((n) => (n.gone || n.flatT > 0 ? null : { x: n.x, z: n.z, h: NPC_HEAD }));
+    const i = this.sim.stomp(targets);
+    if (i < 0) return;
+    const n = this.npcs[i];
+    n.hits++;
+    n.pause = Math.max(n.pause, 1.2); // stunned for a moment
+    this.game.addShake(3, 0.12);
+    if (n.hits >= STOMPS_TO_SQUASH) {
+      n.flatT = FLAT_T;
+      Audio.squash();
+      this.game.addShake(7, 0.25);
+      this._burstAt(n.x, n.z, '#ffd14d', 18);
+      this._textAt(n.x, n.z, 'SQUASHED!', '#ffd14d', 70);
+    } else {
+      n.squishT = SQUISH_T;
+      Audio.stomp();
+      this._burstAt(n.x, n.z, '#ffffff', 8);
+      this._textAt(n.x, n.z, `${n.hits}`, '#ffffff', 90);
+    }
+  }
+
   _updateNpcs(dt) {
     for (const n of this.npcs) {
+      // Squashed flat: lie there a moment, then poof.
+      if (n.flatT > 0) {
+        n.flatT -= dt;
+        n.rig.scale.set(1.6, 0.1, 1.6);
+        n.rig.position.set(n.x, 0, n.z);
+        if (n.flatT <= 0) {
+          n.gone = true;
+          n.respawnT = RESPAWN_T;
+          n.rig.visible = n.shadow.visible = false;
+          this._burstAt(n.x, n.z, '#e8e8f0', 14);
+          Audio.pop();
+        }
+        continue;
+      }
+      // Gone: a new fair-goer wanders in somewhere else after a while.
+      if (n.gone) {
+        n.respawnT -= dt;
+        if (n.respawnT <= 0) {
+          n.gone = false;
+          n.hits = 0;
+          n.x = n.tx = n._rng.range(160, WORLD.w - 160);
+          n.z = n.tz = n._rng.range(200, WORLD.h - 160);
+          n.popT = 0.35;
+          n.rig.visible = n.shadow.visible = true;
+        }
+        continue;
+      }
+      // Squished from a stomp (or popping in fresh): spring back to shape.
+      if (n.squishT > 0) {
+        n.squishT -= dt;
+        const k = Math.max(0, n.squishT / SQUISH_T);
+        const sy = 1 - 0.5 * k;
+        n.rig.scale.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
+      } else if (n.popT > 0) {
+        n.popT -= dt;
+        n.rig.scale.setScalar(1 - Math.max(0, n.popT / 0.35));
+      } else {
+        n.rig.scale.setScalar(1);
+      }
       if (n.pause > 0) {
         n.pause -= dt;
       } else {
@@ -315,6 +392,7 @@ export class World3DScene extends Scene {
     if (this._paused) return;
     this.fx.render(ctx);
     this._drawJoystick(ctx);
+    this._drawJumpBtn(ctx);
     this._drawCamBtn(ctx);
   }
 
@@ -338,6 +416,30 @@ export class World3DScene extends Scene {
     ctx.restore();
   }
 
+  _drawJumpBtn(ctx) {
+    const b = this._jumpBtn;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    const held = this.game.input.isButtonDown && this.game.input.isButtonDown('jump');
+    ctx.save();
+    ctx.globalAlpha = held ? 0.95 : 0.78;
+    ctx.fillStyle = '#ff5d8f';
+    ctx.beginPath();
+    ctx.arc(cx, cy, b.w / 2 - (held ? 4 : 0), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, b.w / 2 - 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '800 22px "Trebuchet MS", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('JUMP', cx, cy + 1);
+    ctx.restore();
+  }
+
   // Round button with a little camera and a curved "swing round" arrow.
   _drawCamBtn(ctx) {
     const b = this._camBtn;
@@ -356,6 +458,11 @@ export class World3DScene extends Scene {
     ctx.beginPath();
     ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
     ctx.stroke();
+    // Icon is drawn at the 96px design size and scaled to the button.
+    const k = b.w / 96;
+    ctx.translate(cx, cy);
+    ctx.scale(k, k);
+    ctx.translate(-cx, -cy);
     // Camera body + lens.
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();

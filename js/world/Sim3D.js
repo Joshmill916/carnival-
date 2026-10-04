@@ -6,7 +6,7 @@
 // Coordinate system: the old 2D map's (x, y) becomes 3D (x, z) with y as real
 // height, so every position in defs.js carries over unchanged.
 import { clamp } from '../core/util.js';
-import { WORLD, BOOTHS, RIDES, FOOD, TREES, FOUNTAIN, SPAWN, PLAZA, COLLIDE_R, rideFrame } from '../data/defs.js';
+import { WORLD, BOOTHS, RIDES, FOOD, TREES, FOUNTAIN, SPAWN, PLAZA, PLATFORMS, COLLIDE_R, rideFrame } from '../data/defs.js';
 
 // --- Feel constants — tune these ---------------------------------------------
 export const RUN_SPEED = 300;   // top running speed, units/s
@@ -34,6 +34,10 @@ export const CAM_MIN = 30;
 // beyond starts further out, so it never ends up inside a pine).
 export const CAM_OUT = 320;
 export const CAM_ORBIT_SPEED = 5; // rad/s when the camera button swings the view
+// Stomping fair-goers, Mario style: land on a head and you bounce off it.
+export const STOMP_R = 30;       // how close (horizontally) to their middle you must land
+export const STOMP_V = 620;      // the bounce
+export const STOMPS_TO_SQUASH = 3;
 export const TRIGGER_R = 140;   // booth prompt proximity (booths are bigger now)
 export const FOOD_R = 74;
 export const RIDE_GRAVITY = 1600; // the ride fling keeps its own snappier gravity
@@ -84,6 +88,7 @@ export class Sim3D {
       yaw: opts.yaw ?? 0,
       grounded: true,
       jumps: 0,
+      prevY: 0,
       speed: 0,      // horizontal speed, for the walk animation
       squash: 1,     // 1 = neutral; <1 squashed, >1 stretched
     };
@@ -242,15 +247,11 @@ export class Sim3D {
       }
     }
 
-    // Gravity + ground.
+    // Gravity, then horizontal motion and collision, then find the floor
+    // under you: the ground, or the top of whatever you're standing on.
+    p.prevY = p.y;
     p.vy -= GRAVITY * dt;
     p.y += p.vy * dt;
-    if (p.y <= 0) {
-      if (!p.grounded) { ev.landed = true; p.squash = 0.7; }
-      p.y = 0; p.vy = 0; p.grounded = true; p.jumps = 0;
-    }
-    // Squash/stretch eases back to neutral.
-    p.squash += (1 - p.squash) * Math.min(1, 9 * dt);
 
     p.x += p.vx * dt;
     p.z += p.vz * dt;
@@ -258,12 +259,60 @@ export class Sim3D {
 
     this._collide();
     this._clampToWorld();
+
+    const floor = this._floorAt(p.x, p.z, Math.max(p.y, p.prevY));
+    if (p.y <= floor) {
+      if (!p.grounded) { ev.landed = true; p.squash = 0.7; }
+      p.y = floor; p.vy = 0; p.grounded = true; p.jumps = 0;
+    } else if (p.grounded && p.y > floor + 1) {
+      // Walked off the edge of something: fall, with one jump left.
+      p.grounded = false;
+      p.jumps = 1;
+    }
+    // Squash/stretch eases back to neutral.
+    p.squash += (1 - p.squash) * Math.min(1, 9 * dt);
+  }
+
+  // Highest surface under (x, z) that's at or below height y (with a little
+  // step-up allowance so landing on an edge counts).
+  _floorAt(x, z, y) {
+    let floor = 0;
+    for (const o of this.obstacles) {
+      if (!Number.isFinite(o.top) || o.top > y + 8 || o.top <= floor) continue;
+      if (Math.hypot(x - o.x, z - o.z) < o.r + 4) floor = o.top;
+    }
+    return floor;
+  }
+
+  // Bounce off a fair-goer's head. `targets` are { x, z, h } (h = head height);
+  // returns the index of the one stomped this step, or -1. Only counts when
+  // you come DOWN onto them from above, like a Goomba.
+  stomp(targets) {
+    const p = this.player;
+    if (p.grounded || p.vy >= 0 || this.rider.state !== 'free') return -1;
+    const fromY = p.prevY ?? p.y;
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      if (!t || t.gone) continue;
+      if (fromY < t.h - 6 || p.y > t.h + 6) continue;   // must cross their head going down
+      if (Math.hypot(p.x - t.x, p.z - t.z) > STOMP_R) continue;
+      p.y = t.h;
+      p.vy = STOMP_V;
+      p.jumps = 1;          // a bounce leaves your double jump available
+      p.squash = 0.72;
+      return i;
+    }
+    return -1;
   }
 
   // Push the player out of any obstacle cylinder he has walked into.
   _collide() {
     const p = this.player;
+    // Use the higher of this frame's and last frame's height, so dropping
+    // onto an edge lands you on it rather than shoving you off sideways.
+    const feet = Math.max(p.y, p.prevY ?? p.y);
     for (const o of this.obstacles) {
+      if (feet >= o.top - 2) continue; // up on top of it, not walking into it
       const dx = p.x - o.x, dz = p.z - o.z;
       const rr = o.r + PLAYER_R;
       const d2 = dx * dx + dz * dz;
@@ -467,13 +516,19 @@ export class Sim3D {
   }
 }
 
+export const FOUNTAIN_TOPS = [28, 82];
+
 // Solid things you bump into. Rides are deliberately absent — you need to be
 // able to walk into one to board it.
 export function buildObstacles() {
   const out = [];
-  for (const b of BOOTHS) out.push({ x: b.x, z: b.y, r: COLLIDE_R.booth });
-  for (const f of FOOD) out.push({ x: f.x, z: f.y, r: COLLIDE_R.food });
-  for (const t of TREES) out.push({ x: t.x, z: t.y, r: COLLIDE_R.tree });
-  out.push({ x: FOUNTAIN.x, z: FOUNTAIN.y, r: FOUNTAIN.r });
+  // `top` is how tall it is: you can land on anything with a finite top.
+  for (const b of BOOTHS) out.push({ x: b.x, z: b.y, r: COLLIDE_R.booth, top: Infinity });
+  for (const f of FOOD) out.push({ x: f.x, z: f.y, r: COLLIDE_R.food, top: Infinity });
+  for (const t of TREES) out.push({ x: t.x, z: t.y, r: COLLIDE_R.tree, top: Infinity });
+  // The fountain is two tiers: the wide basin rim, then the upper bowl.
+  out.push({ x: FOUNTAIN.x, z: FOUNTAIN.y, r: FOUNTAIN.r, top: FOUNTAIN_TOPS[0] });
+  out.push({ x: FOUNTAIN.x, z: FOUNTAIN.y, r: 46, top: FOUNTAIN_TOPS[1] });
+  for (const pl of PLATFORMS) out.push({ x: pl.x, z: pl.y, r: pl.s + 6, top: pl.top });
   return out;
 }

@@ -78,6 +78,17 @@ class AudioEngine {
     this._tone(200, 120, 'sawtooth', 0.06);
     setTimeout(() => this._tone(140, 120, 'square', 0.05), 50);
   }
+  // Springy "boing" for bouncing off someone's head.
+  stomp() {
+    this._tone(330, 70, 'square', 0.06);
+    setTimeout(() => this._tone(660, 90, 'square', 0.05), 45);
+  }
+  // Squashed flat: a deflating squelch.
+  squash() {
+    this._tone(520, 90, 'sawtooth', 0.06);
+    setTimeout(() => this._tone(260, 120, 'sawtooth', 0.05), 70);
+    setTimeout(() => this._tone(130, 160, 'square', 0.05), 150);
+  }
   // Short high pop.
   pop() {
     this._tone(880, 60, 'triangle', 0.05);
