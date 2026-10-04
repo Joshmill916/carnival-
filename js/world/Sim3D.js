@@ -6,7 +6,7 @@
 // Coordinate system: the old 2D map's (x, y) becomes 3D (x, z) with y as real
 // height, so every position in defs.js carries over unchanged.
 import { clamp } from '../core/util.js';
-import { WORLD, BOOTHS, RIDES, FOOD, TREES, FOUNTAIN, SPAWN, COLLIDE_R } from '../data/defs.js';
+import { WORLD, BOOTHS, RIDES, FOOD, TREES, FOUNTAIN, SPAWN, PLAZA, COLLIDE_R, rideFrame } from '../data/defs.js';
 
 // --- Feel constants — tune these ---------------------------------------------
 export const RUN_SPEED = 300;   // top running speed, units/s
@@ -33,9 +33,22 @@ export const CAM_MIN = 30;
 // The camera may trail out past the fence, but only this far (the forest
 // beyond starts further out, so it never ends up inside a pine).
 export const CAM_OUT = 320;
+export const CAM_ORBIT_SPEED = 5; // rad/s when the camera button swings the view
 export const TRIGGER_R = 140;   // booth prompt proximity (booths are bigger now)
 export const FOOD_R = 74;
 export const RIDE_GRAVITY = 1600; // the ride fling keeps its own snappier gravity
+// Ferris wheel: you start in the bottom gondola, go once round, and are
+// thrown off on the way back up past the side (angle in the wheel's plane,
+// 0 = level with the axle on its local +X side, PI/2 = top).
+export const FERRIS_SPIN0 = 0.9;       // rad/s at the start
+export const FERRIS_SPIN_ACC = 1.0;    // rad/s^2
+export const FERRIS_SEAT = 34;         // you sit this far below a gondola's pivot
+export const FERRIS_FLING_A = -Math.PI / 2 + Math.PI * 2 + Math.PI * 0.75;
+// Carousel: hop on a horse, spin up, fly off.
+export const CAROUSEL_SPIN0 = 1.4;
+export const CAROUSEL_SPIN_ACC = 2.6;
+export const CAROUSEL_SEAT = 44;       // standing on a horse's back
+export const CAROUSEL_TIME = 2.6;
 export const PLAYER_R = 20;     // collision radius
 export const EDGE = 24;         // keep-out from the world fence
 
@@ -75,6 +88,7 @@ export class Sim3D {
       squash: 1,     // 1 = neutral; <1 squashed, >1 stretched
     };
     this.camYaw = opts.yaw ?? 0;
+    this.camOrbit = 0; // radians still to swing (camera button)
     this.camX = this.player.x + Math.sin(this.camYaw) * CAM_DIST;
     this.camZ = this.player.z + Math.cos(this.camYaw) * CAM_DIST;
     this.t = 0;
@@ -92,7 +106,7 @@ export class Sim3D {
   // Ride state machine: free → riding → flung → dizzy → free.
   _resetRider() {
     this.rider = {
-      state: 'free', ride: null, t: 0,
+      state: 'free', ride: null, frame: null, t: 0,
       angle: 0, radius: 0, spinRate: 0,
       vx: 0, vz: 0, rot: 0, vrot: 0,
       dizzyT: 0, cooldown: 0,
@@ -121,8 +135,28 @@ export class Sim3D {
 
   // A trailing "leash" camera. It is only dragged when you pull away from it or
   // back into it; running sideways leaves it alone, so the view never spins.
+  // Swing the camera round the player by `delta` radians (the camera button).
+  // It turns smoothly over a few frames rather than snapping.
+  orbitCamera(delta) {
+    this.camOrbit += delta;
+  }
+
   _updateCamera(dt) {
     const p = this.player;
+    if (this.camOrbit) {
+      const step = Math.sign(this.camOrbit) * Math.min(Math.abs(this.camOrbit), CAM_ORBIT_SPEED * dt);
+      this.camOrbit -= step;
+      const ox = this.camX - p.x, oz = this.camZ - p.z;
+      const c = Math.cos(step), s = Math.sin(step);
+      this.camX = p.x + ox * c - oz * s;
+      this.camZ = p.z + ox * s + oz * c;
+      // Keep a full leash while orbiting so the view doesn't stay pulled in.
+      const d = Math.hypot(this.camX - p.x, this.camZ - p.z) || 1;
+      if (d < CAM_DIST) {
+        this.camX = p.x + ((this.camX - p.x) / d) * CAM_DIST;
+        this.camZ = p.z + ((this.camZ - p.z) / d) * CAM_DIST;
+      }
+    }
     let dx = this.camX - p.x, dz = this.camZ - p.z;
     let d = Math.hypot(dx, dz);
     if (d < 1e-4) {
@@ -296,7 +330,7 @@ export class Sim3D {
     if (rd.state === 'free') {
       if (rd.cooldown <= 0 && p.grounded) {
         for (const ride of RIDES) {
-          if (Math.hypot(p.x - ride.x, p.z - ride.y) < ride.r * 0.5) {
+          if (this._touchingRide(ride)) {
             this._mount(ride, ev);
             break;
           }
@@ -307,13 +341,36 @@ export class Sim3D {
 
     if (rd.state === 'riding') {
       rd.t += dt;
-      rd.spinRate = 2 + rd.t * 5; // accelerate
-      rd.angle += rd.spinRate * dt;
-      p.y = 6 + Math.sin(rd.t * 6) * 4;
-      p.x = rd.ride.x + Math.cos(rd.angle) * rd.radius;
-      p.z = rd.ride.y + Math.sin(rd.angle) * rd.radius;
-      p.yaw = headingToYaw(-Math.sin(rd.angle), Math.cos(rd.angle));
-      if (rd.t > 2.3) this._fling(ev);
+      const f = rd.frame;
+      if (rd.ride.kind === 'ferris') {
+        // Up and over in the wheel's own plane, speeding up as you go.
+        rd.spinRate = FERRIS_SPIN0 + rd.t * FERRIS_SPIN_ACC;
+        rd.angle += rd.spinRate * dt;
+        const along = Math.cos(rd.angle) * f.R;
+        p.x = rd.ride.x + f.ax * along;
+        p.z = rd.ride.y + f.az * along;
+        p.y = f.hubY + Math.sin(rd.angle) * f.R - FERRIS_SEAT;
+        p.yaw = headingToYaw(f.nx, f.nz); // looking out of the gondola
+        // One full turn, then let go on the way up past the side.
+        if (rd.angle >= FERRIS_FLING_A) this._fling(ev);
+      } else {
+        // Same direction as the carousel turns (its spinner's rotation.y
+        // increases, which moves a horse's ground angle the negative way).
+        rd.spinRate = CAROUSEL_SPIN0 + rd.t * CAROUSEL_SPIN_ACC;
+        rd.angle -= rd.spinRate * dt;
+        p.x = rd.ride.x + Math.cos(rd.angle) * f.horseR;
+        p.z = rd.ride.y + Math.sin(rd.angle) * f.horseR;
+        p.y = CAROUSEL_SEAT + Math.sin(rd.t * 6) * 5;
+        p.yaw = headingToYaw(Math.sin(rd.angle), -Math.cos(rd.angle));
+        // Once it's up to speed, let go when you're heading back into the
+        // fair (not into the fence behind the ride).
+        if (rd.t > CAROUSEL_TIME) {
+          const tx = Math.sin(rd.angle), tz = -Math.cos(rd.angle);
+          const px = PLAZA.x - rd.ride.x, pz = PLAZA.y - rd.ride.y;
+          const toPlaza = (tx * px + tz * pz) / (Math.hypot(px, pz) || 1);
+          if (toPlaza > 0.75 || rd.t > CAROUSEL_TIME + 1.5) this._fling(ev);
+        }
+      }
       return;
     }
 
@@ -336,29 +393,62 @@ export class Sim3D {
     }
   }
 
+  // Run into it and you're on: the Ferris wheel is a flat disc standing on
+  // its edge, so you board anywhere near its foot (from the front or the
+  // back); the carousel boards the moment you reach its platform.
+  _touchingRide(ride) {
+    const p = this.player;
+    const dx = p.x - ride.x, dz = p.z - ride.y;
+    if (ride.kind === 'ferris') {
+      const f = rideFrame(ride);
+      const across = dx * f.nx + dz * f.nz;   // distance off the wheel's plane
+      const along = dx * f.ax + dz * f.az;    // distance along it
+      return Math.abs(across) < 70 && Math.abs(along) < f.R * 0.55;
+    }
+    return Math.hypot(dx, dz) < ride.r + PLAYER_R;
+  }
+
   _mount(ride, ev) {
     const rd = this.rider, p = this.player;
     rd.state = 'riding';
     rd.ride = ride;
+    rd.frame = rideFrame(ride);
     rd.t = 0;
-    rd.radius = ride.r * 0.55;
-    rd.angle = Math.atan2(p.z - ride.y, p.x - ride.x);
     rd.rot = 0;
+    if (ride.kind === 'ferris') {
+      rd.angle = -Math.PI / 2;  // climb into the bottom gondola
+      rd.radius = rd.frame.R;
+    } else {
+      rd.angle = Math.atan2(p.z - ride.y, p.x - ride.x); // hop on the nearest horse
+      rd.radius = rd.frame.horseR;
+    }
     p.vx = p.vz = 0;
-    p.y = 0;
+    p.vy = 0;
     ev.mounted = ride;
   }
 
   _fling(ev) {
     const rd = this.rider, p = this.player;
-    const tangent = rd.angle + Math.PI / 2;
-    const speed = clamp(rd.spinRate * rd.radius, 220, 720);
-    rd.vx = Math.cos(tangent) * speed + Math.cos(rd.angle) * 120;
-    rd.vz = Math.sin(tangent) * speed + Math.sin(rd.angle) * 120;
-    p.vy = 540;
-    p.y = rd.ride.r * 0.1;
+    const f = rd.frame;
+    if (rd.ride.kind === 'ferris') {
+      // Along the wheel's motion (up and over), plus a shove out toward the
+      // plaza so you sail clear of the wheel instead of into its legs.
+      const speed = clamp(rd.spinRate * f.R * 0.7, 300, 560);
+      const vAlong = -Math.sin(rd.angle) * speed;
+      rd.vx = f.ax * vAlong + f.nx * 280;
+      rd.vz = f.az * vAlong + f.nz * 280;
+      p.vy = Math.cos(rd.angle) * speed + 260;
+      rd.vrot = (vAlong >= 0 ? -1 : 1) * 12;
+    } else {
+      // Off the edge along the spin direction, and outward.
+      const speed = clamp(rd.spinRate * f.horseR, 260, 640);
+      const tx = Math.sin(rd.angle), tz = -Math.cos(rd.angle);
+      rd.vx = tx * speed + Math.cos(rd.angle) * 180;
+      rd.vz = tz * speed + Math.sin(rd.angle) * 180;
+      p.vy = 560;
+      rd.vrot = -14;
+    }
     rd.rot = 0;
-    rd.vrot = (rd.vx >= 0 ? 1 : -1) * 14;
     rd.state = 'flung';
     ev.flung = true;
   }

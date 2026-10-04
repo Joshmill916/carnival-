@@ -226,6 +226,72 @@ function walkUntilBooth(sim, input, budget = 240) {
   ok(sim.player.y === 0, 'ending back on the ground');
 }
 
+// --- 10b. Rides move the right way ------------------------------------------
+{
+  const { rideFrame } = await import('./js/data/defs.js');
+  const ferris = RIDES.find((r) => r.kind === 'ferris');
+  const carousel = RIDES.find((r) => r.kind === 'carousel');
+
+  // Run into the carousel's platform edge (not its centre) and you're on.
+  const c = new Sim3D({ x: carousel.x, z: carousel.y + carousel.r + 60, yaw: 0 });
+  let boarded = false, guard = 0;
+  while (!boarded && guard++ < 200) boarded = !!c.step(DT, { mvx: 0, mvy: -1 }).mounted;
+  ok(boarded, 'running into the carousel platform edge boards it');
+  // The 3D carousel spins with rotation.y increasing, which moves a horse's
+  // ground angle atan2(z, x) NEGATIVE — the rider must go the same way.
+  const a0 = Math.atan2(c.player.z - carousel.y, c.player.x - carousel.x);
+  for (let i = 0; i < 10; i++) c.step(DT, {});
+  const a1 = Math.atan2(c.player.z - carousel.y, c.player.x - carousel.x);
+  ok(Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)) < 0, 'carousel rider spins the same way the carousel turns');
+  ok(Math.abs(Math.hypot(c.player.x - carousel.x, c.player.z - carousel.y) - rideFrame(carousel).horseR) < 1, 'and rides on the horse ring');
+  guard = 0;
+  while (c.rider.state === 'riding' && guard++ < 1000) c.step(DT, {});
+  const { PLAZA } = await import('./js/data/defs.js');
+  const d0 = Math.hypot(c.player.x - PLAZA.x, c.player.z - PLAZA.y);
+  for (let i = 0; i < 30; i++) c.step(DT, {});
+  ok(c.rider.state !== 'riding' && Math.hypot(c.player.x - PLAZA.x, c.player.z - PLAZA.y) < d0 - 50,
+    'the carousel throws you back toward the fair, not into the fence');
+
+  // Ferris wheel: you go up and over IN the wheel's plane, high in the air.
+  const f = rideFrame(ferris);
+  const fs = new Sim3D({ x: ferris.x + f.nx * 160, z: ferris.y + f.nz * 160, yaw: 0 });
+  // Walk straight at the wheel from in front of it.
+  let onWheel = false;
+  guard = 0;
+  while (!onWheel && guard++ < 400) {
+    const ev = fs.step(DT, { mvx: 0, mvy: 0 });
+    if (ev.mounted) onWheel = true;
+    fs.player.x -= f.nx * 3; fs.player.z -= f.nz * 3; // push toward the wheel
+  }
+  ok(onWheel, 'walking into the Ferris wheel boards it');
+  let maxRideY = 0, offPlane = 0;
+  while (fs.rider.state === 'riding' && guard++ < 3000) {
+    fs.step(DT, {});
+    if (fs.rider.state !== 'riding') break;
+    maxRideY = Math.max(maxRideY, fs.player.y);
+    const across = (fs.player.x - ferris.x) * f.nx + (fs.player.z - ferris.y) * f.nz;
+    offPlane = Math.max(offPlane, Math.abs(across));
+  }
+  ok(maxRideY > f.hubY + f.R * 0.8, `Ferris wheel lifts you over the top (${Math.round(maxRideY)} units up)`);
+  ok(offPlane < 1, 'and you stay in the wheel\'s plane the whole way round');
+  ok(fs.rider.state === 'flung', 'then it throws you off');
+  const across0 = (fs.player.x - ferris.x) * f.nx + (fs.player.z - ferris.y) * f.nz;
+  for (let i = 0; i < 30; i++) fs.step(DT, {});
+  const across1 = (fs.player.x - ferris.x) * f.nx + (fs.player.z - ferris.y) * f.nz;
+  ok(across1 > across0 + 50, 'out toward the plaza, clear of the wheel');
+}
+
+// --- 10c. Camera button swings the view round the player ---------------------
+{
+  const sim = new Sim3D({ x: 1100, z: 1500, yaw: 0 });
+  for (let i = 0; i < 30; i++) sim.step(DT, {});
+  const y0 = sim.camYaw;
+  sim.orbitCamera(Math.PI / 2);
+  for (let i = 0; i < 60; i++) sim.step(DT, {});
+  const turned = Math.atan2(Math.sin(sim.camYaw - y0), Math.cos(sim.camYaw - y0));
+  ok(Math.abs(Math.abs(turned) - Math.PI / 2) < 0.05, `camera button swings the view 90° (${Math.round(turned * 180 / Math.PI)}°)`);
+}
+
 // --- 11. Obstacles are built from the real fairground ------------------------
 {
   const obs = buildObstacles();
