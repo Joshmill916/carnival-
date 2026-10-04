@@ -3,9 +3,12 @@
 // layer keeps owning all pointer input and all overlay drawing.
 import * as THREE from '../vendor/three.module.min.js';
 
-const FOV = 68; // wider than a default 3rd-person cam so the fair reads as open, not cramped
-const NEAR = 1;
-const FAR = 4000;
+// Vertical FOV. Portrait phones get a taller one, since their narrow width
+// otherwise shows only a sliver of the fair (the "too tight" feeling).
+const FOV_LANDSCAPE = 62;
+const FOV_PORTRAIT = 76;
+const NEAR = 2;
+const FAR = 9000; // the sky dome sits at 6000
 const MAX_DPR = 2; // 3x on a phone costs a lot and buys nothing at this poly count
 
 // Cheap probe so the game can fall back to the 2D map on a device without WebGL.
@@ -35,7 +38,9 @@ export class Renderer3D {
       return;
     }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
-    this.camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, FAR);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.camera = new THREE.PerspectiveCamera(FOV_LANDSCAPE, 1, NEAR, FAR);
     this.ok = true;
     this._resize();
     this._onResize = () => this._resize();
@@ -53,6 +58,7 @@ export class Renderer3D {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    this.camera.fov = w < h ? FOV_PORTRAIT : FOV_LANDSCAPE;
     this.camera.updateProjectionMatrix();
   }
 

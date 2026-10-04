@@ -1,8 +1,24 @@
 // Static content definitions: the fairground layout (booths, rides, food,
 // decorations), the prize catalog, and the level/progression ladder.
 
+// Layout spread: every position below is authored on the original 1400x1200
+// plan and multiplied out, so the fair has real breathing room between
+// attractions without re-placing anything by hand.
+export const SPREAD = 1.6;
+export const sp = (v) => Math.round(v * SPREAD);
+
 // World bounds the avatar can roam (the fairground field).
-export const WORLD = { w: 1400, h: 1200 };
+export const WORLD = { w: sp(1400), h: sp(1200) };
+
+// Bump when the layout moves so saved player positions are reset to SPAWN
+// instead of landing somewhere odd (or inside a tent).
+export const LAYOUT_VERSION = 2;
+
+// Central plaza with the fountain.
+export const PLAZA = { x: WORLD.w / 2, y: Math.round(WORLD.h * 0.55), r: 300 };
+export const FOUNTAIN = { x: PLAZA.x, y: PLAZA.y, r: 92 };
+// You arrive through the entrance arch on the south fence, facing the fair.
+export const SPAWN = { x: PLAZA.x - 210, y: WORLD.h - 300 };
 
 // --- Game booths -------------------------------------------------------------
 // `game` maps to the MiniGame registry key. All three are open from the start;
@@ -13,8 +29,8 @@ export const BOOTHS = [
     name: 'Ring Toss',
     game: 'rings',
     minLevel: 1,
-    x: 360,
-    y: 430,
+    x: sp(360),
+    y: sp(430),
     color: '#ff5d8f',
     emoji: '🎯',
   },
@@ -23,8 +39,8 @@ export const BOOTHS = [
     name: 'Bottle Knockdown',
     game: 'bottles',
     minLevel: 1,
-    x: 1040,
-    y: 430,
+    x: sp(1040),
+    y: sp(430),
     color: '#3ddc97',
     emoji: '🎳',
   },
@@ -33,8 +49,8 @@ export const BOOTHS = [
     name: 'Balloon Darts',
     game: 'darts',
     minLevel: 1,
-    x: 700,
-    y: 930,
+    x: sp(700),
+    y: sp(930),
     color: '#5b8cff',
     emoji: '🎈',
   },
@@ -43,8 +59,8 @@ export const BOOTHS = [
     name: 'High Striker',
     game: 'striker',
     minLevel: 1,
-    x: 700,
-    y: 430,
+    x: sp(700),
+    y: sp(430),
     color: '#ff8f4d',
     emoji: '🔨',
   },
@@ -53,8 +69,8 @@ export const BOOTHS = [
     name: 'Claw Machine',
     game: 'claw',
     minLevel: 2,
-    x: 360,
-    y: 700,
+    x: sp(360),
+    y: sp(700),
     color: '#b07cff',
     emoji: '🦾',
   },
@@ -63,8 +79,8 @@ export const BOOTHS = [
     name: 'BB Gun Star',
     game: 'bbgun',
     minLevel: 3,
-    x: 1040,
-    y: 700,
+    x: sp(1040),
+    y: sp(700),
     color: '#ff5d5d',
     emoji: '⭐',
   },
@@ -73,8 +89,8 @@ export const BOOTHS = [
     name: 'Rail Bowling',
     game: 'railbowl',
     minLevel: 4,
-    x: 210,
-    y: 1050,
+    x: sp(210),
+    y: sp(1050),
     color: '#3ddc97',
     emoji: '🎳',
   },
@@ -83,8 +99,8 @@ export const BOOTHS = [
     name: 'Basket Toss',
     game: 'basket',
     minLevel: 5,
-    x: 1190,
-    y: 1050,
+    x: sp(1190),
+    y: sp(1050),
     color: '#ffd14d',
     emoji: '🧺',
   },
@@ -93,8 +109,8 @@ export const BOOTHS = [
     name: 'Goldfish Toss',
     game: 'goldfish',
     minLevel: 6,
-    x: 700,
-    y: 185,
+    x: sp(700),
+    y: sp(185),
     color: '#5b8cff',
     emoji: '🐟',
   },
@@ -102,33 +118,36 @@ export const BOOTHS = [
 
 // --- Rides (decorative landmarks, animated) ----------------------------------
 export const RIDES = [
-  { id: 'ferris', kind: 'ferris', x: 250, y: 200, r: 150, name: 'Ferris Wheel' },
-  { id: 'carousel', kind: 'carousel', x: 1150, y: 220, r: 110, name: 'Carousel' },
+  { id: 'ferris', kind: 'ferris', x: sp(250), y: sp(200), r: 190, name: 'Ferris Wheel' },
+  { id: 'carousel', kind: 'carousel', x: sp(1150), y: sp(220), r: 140, name: 'Carousel' },
 ];
 
 // --- Food stalls (decorative) ------------------------------------------------
 export const FOOD = [
-  { id: 'hotdog', x: 620, y: 250, emoji: '🌭', name: 'Hot Dogs', color: '#e8552e' },
-  { id: 'icecream', x: 800, y: 250, emoji: '🍦', name: 'Ice Cream', color: '#5bc8e8' },
-  { id: 'popcorn', x: 1040, y: 820, emoji: '🍿', name: 'Popcorn', color: '#f2c14e' },
-  { id: 'cotton', x: 360, y: 820, emoji: '🍭', name: 'Cotton Candy', color: '#ff8fc7' },
+  { id: 'hotdog', x: sp(620), y: sp(250), emoji: '🌭', name: 'Hot Dogs', color: '#e8552e' },
+  { id: 'icecream', x: sp(800), y: sp(250), emoji: '🍦', name: 'Ice Cream', color: '#5bc8e8' },
+  { id: 'popcorn', x: sp(1040), y: sp(820), emoji: '🍿', name: 'Popcorn', color: '#f2c14e' },
+  { id: 'cotton', x: sp(360), y: sp(820), emoji: '🍭', name: 'Cotton Candy', color: '#ff8fc7' },
 ];
 
 // --- Static decorations ------------------------------------------------------
 export const TREES = [
-  { x: 120, y: 520 }, { x: 1290, y: 560 }, { x: 150, y: 980 },
-  { x: 1280, y: 980 }, { x: 700, y: 120 }, { x: 480, y: 660 },
-  { x: 930, y: 660 }, { x: 700, y: 1120 },
+  { x: sp(120), y: sp(520) }, { x: sp(1290), y: sp(560) }, { x: sp(150), y: sp(980) },
+  { x: sp(1280), y: sp(980) }, { x: sp(700), y: sp(120) }, { x: sp(470), y: sp(560) },
+  { x: sp(930), y: sp(560) }, { x: sp(300), y: sp(1150) },
+  { x: sp(520), y: sp(330) }, { x: sp(880), y: sp(330) }, { x: sp(460), y: sp(1100) },
+  { x: sp(940), y: sp(1100) }, { x: sp(1260), y: sp(820) }, { x: sp(140), y: sp(780) },
 ];
 
 // String-light runs: each is a list of pole anchor points lights are strung between.
 export const LIGHT_LINES = [
-  [{ x: 460, y: 360 }, { x: 700, y: 320 }, { x: 940, y: 360 }],
-  [{ x: 300, y: 700 }, { x: 700, y: 740 }, { x: 1100, y: 700 }],
+  // Placed in open lawn between the booth rows, clear of every path.
+  [{ x: 260, y: 560 }, { x: 840, y: 500 }, { x: 1400, y: 500 }, { x: 1980, y: 560 }],
+  [{ x: 300, y: 1440 }, { x: 840, y: 1440 }, { x: 1400, y: 1440 }, { x: 1940, y: 1440 }],
 ];
 
 // How many wandering fair-goers to spawn.
-export const NPC_COUNT = 14;
+export const NPC_COUNT = 22;
 
 // --- 3D world tuning ---------------------------------------------------------
 // The overworld is rendered in 3D (see js/world/), where the 2D map's (x, y)
@@ -136,8 +155,8 @@ export const NPC_COUNT = 14;
 // 3D world and the 2D fallback map; these extra dimensions are 3D-only.
 // Rides are intentionally absent from COLLIDE_R — you must be able to walk into
 // one to board it.
-export const COLLIDE_R = { booth: 62, food: 42, tree: 22 };
-export const HEIGHTS = { booth: 130, food: 96, tree: 150, pole: 170 };
+export const COLLIDE_R = { booth: 84, food: 46, tree: 24 };
+export const HEIGHTS = { booth: 150, food: 110, tree: 170, pole: 240 };
 
 // --- Prizes ------------------------------------------------------------------
 // Tiered catalog. Redeem tickets for a prize; trade 3 of one tier up to a prize

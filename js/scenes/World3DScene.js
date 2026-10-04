@@ -17,8 +17,10 @@ import {
   buildDizzyStars, animateDizzyStars, SHIRTS, SKINS, HAIRS,
 } from '../world/Actors3D.js';
 
-const CAM_HEIGHT = 320;   // how high above the player the camera floats
-const CAM_LOOK_UP = 80;   // it aims a little above his feet
+const CAM_HEIGHT = 430;   // how high above the player the camera floats
+const CAM_LOOK_UP = 40;   // it aims a little above his feet...
+const CAM_LOOK_AHEAD = 170; // ...and out ahead of him, so he sits low on screen
+                            // and you can see where you're running
 const CAM_SMOOTH = 9;     // vertical/positional smoothing
 
 const JUMP_BTN = { w: 108, h: 108, margin: 26 };
@@ -281,7 +283,10 @@ export class World3DScene extends Scene {
       cam.position.x += (Math.random() * 2 - 1) * i;
       cam.position.y += (Math.random() * 2 - 1) * i;
     }
-    cam.lookAt(p.x, p.y + CAM_LOOK_UP, p.z);
+    const ax = p.x - this.sim.camX, az = p.z - this.sim.camZ;
+    const al = Math.hypot(ax, az) || 1;
+    cam.lookAt(p.x + (ax / al) * CAM_LOOK_AHEAD, p.y + CAM_LOOK_UP, p.z + (az / al) * CAM_LOOK_AHEAD);
+    this.world.follow(cam, p.x, p.z);
   }
 
   _persist() {

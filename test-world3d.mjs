@@ -300,7 +300,7 @@ function walkUntilBooth(sim, input, budget = 240) {
   } catch (e) { rigThrew = e; }
   ok(!rigThrew, `character rigs build and animate${rigThrew ? ': ' + rigThrew.message : ''}`);
 
-  ok(FOOD.length === 4 && TREES.length === 8, 'food stalls and trees still defined');
+  ok(FOOD.length === 4 && TREES.length >= 8, 'food stalls and trees still defined');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

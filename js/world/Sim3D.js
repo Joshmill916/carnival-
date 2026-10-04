@@ -6,7 +6,7 @@
 // Coordinate system: the old 2D map's (x, y) becomes 3D (x, z) with y as real
 // height, so every position in defs.js carries over unchanged.
 import { clamp } from '../core/util.js';
-import { WORLD, BOOTHS, RIDES, FOOD, TREES, COLLIDE_R } from '../data/defs.js';
+import { WORLD, BOOTHS, RIDES, FOOD, TREES, FOUNTAIN, SPAWN, COLLIDE_R } from '../data/defs.js';
 
 // --- Feel constants — tune these ---------------------------------------------
 export const RUN_SPEED = 300;   // top running speed, units/s
@@ -22,16 +22,19 @@ export const MAX_JUMPS = 2;
 // rotates what "right" on the stick means, which rotates the camera... and you
 // run in circles. With slack, running away from the camera drags it straight
 // behind you and never spins the view.
-export const CAM_DIST = 470;    // how far back the leash lets the camera drift
-export const CAM_NEAR = 280;    // and how close it may come before being pushed out
+export const CAM_DIST = 600;    // how far back the leash lets the camera drift
+export const CAM_NEAR = 400;    // and how close it may come before being pushed out
 export const CAM_LAG = 6;       // how quickly the leash takes up slack
 export const CAM_CLEAR = 44;    // keep-out margin when the camera meets scenery
 // Floor on how far the camera can be pulled in. Deliberately small: when you
 // are wedged against a stall, being uncomfortably close is far better than
 // being *inside* it, so the obstacle constraint wins over comfort.
 export const CAM_MIN = 30;
-export const TRIGGER_R = 110;   // booth prompt proximity (same as the 2D map)
-export const FOOD_R = 64;
+// The camera may trail out past the fence, but only this far (the forest
+// beyond starts further out, so it never ends up inside a pine).
+export const CAM_OUT = 320;
+export const TRIGGER_R = 140;   // booth prompt proximity (booths are bigger now)
+export const FOOD_R = 74;
 export const RIDE_GRAVITY = 1600; // the ride fling keeps its own snappier gravity
 export const PLAYER_R = 20;     // collision radius
 export const EDGE = 24;         // keep-out from the world fence
@@ -63,7 +66,7 @@ export class Sim3D {
   constructor(opts = {}) {
     this.level = opts.level ?? 99;
     this.player = {
-      x: opts.x ?? 600, y: 0, z: opts.z ?? 640,
+      x: opts.x ?? SPAWN.x, y: 0, z: opts.z ?? SPAWN.y,
       vx: 0, vy: 0, vz: 0,
       yaw: opts.yaw ?? 0,
       grounded: true,
@@ -134,6 +137,8 @@ export class Sim3D {
       this.camX += (p.x + nx * want - this.camX) * k;
       this.camZ += (p.z + nz * want - this.camZ) * k;
     }
+    this.camX = clamp(this.camX, -CAM_OUT, WORLD.w + CAM_OUT);
+    this.camZ = clamp(this.camZ, -CAM_OUT, WORLD.h + CAM_OUT);
     this._clearCamera();
     this.camYaw = Math.atan2(this.camX - p.x, this.camZ - p.z);
   }
@@ -379,5 +384,6 @@ export function buildObstacles() {
   for (const b of BOOTHS) out.push({ x: b.x, z: b.y, r: COLLIDE_R.booth });
   for (const f of FOOD) out.push({ x: f.x, z: f.y, r: COLLIDE_R.food });
   for (const t of TREES) out.push({ x: t.x, z: t.y, r: COLLIDE_R.tree });
+  out.push({ x: FOUNTAIN.x, z: FOUNTAIN.y, r: FOUNTAIN.r });
   return out;
 }
