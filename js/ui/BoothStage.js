@@ -370,14 +370,21 @@ export function drawSign(ctx, cx, y, text, bg = '#ffcf3f', fg = '#5a1a2a', size 
   ctx.restore();
 }
 
-// Height of the iOS notch / status bar (the app runs edge-to-edge with
-// viewport-fit=cover), so canvas HUDs can sit below it. 0 outside a browser.
+// Height of the status bar / notch (the app runs edge-to-edge), so canvas HUDs
+// can sit below it. On iOS that's env(safe-area-inset-top); inside the Android
+// app Capacitor reports it as the --safe-area-inset-top CSS variable, a moment
+// after launch — so the value is re-measured about once a second. 0 outside a
+// browser.
 let _safeTop = null;
+let _safeTopAt = -1e9;
 export function safeTop() {
-  if (_safeTop !== null) return _safeTop;
+  const now = typeof performance !== 'undefined' ? performance.now() : 0;
+  if (_safeTop !== null && now - _safeTopAt < 1000) return _safeTop;
+  _safeTopAt = now;
   try {
     const d = document.createElement('div');
-    d.style.cssText = 'position:fixed;top:0;left:0;width:1px;visibility:hidden;height:env(safe-area-inset-top, 0px)';
+    d.style.cssText = 'position:fixed;top:0;left:0;width:1px;visibility:hidden;' +
+      'height:var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
     document.body.appendChild(d);
     _safeTop = d.getBoundingClientRect().height || 0;
     d.remove();

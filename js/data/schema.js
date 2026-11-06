@@ -18,6 +18,7 @@ export function defaultState() {
     lastSeenTs: 0, // updated every save
     settings: {
       muted: false,
+      haptics: true, // phone vibration on big moments
       debug: false,
     },
     player: {

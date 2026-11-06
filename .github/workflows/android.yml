@@ -1,0 +1,100 @@
+# Builds the Android app (Capacitor) on GitHub's servers — no Android SDK is
+# needed on your own computer.
+#
+# Every run produces a DEBUG APK you can download and install on a phone:
+#   Actions tab -> "Android build" -> latest run -> Artifacts -> carnival-debug-apk
+#
+# If the release-signing secrets below are set, it ALSO produces a signed
+# release bundle (.aab) ready to upload to Google Play:
+#   CARNIVAL_KEYSTORE_BASE64   base64 of your upload keystore (.jks)
+#   CARNIVAL_KEYSTORE_PASSWORD keystore password
+#   CARNIVAL_KEY_ALIAS         key alias inside the keystore
+#   CARNIVAL_KEY_PASSWORD      key password
+# (Settings -> Secrets and variables -> Actions -> New repository secret.)
+name: Android build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'manifest.webmanifest'
+      - 'css/**'
+      - 'js/**'
+      - 'assets/**'
+      - 'android/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'scripts/build-web.mjs'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'js/**'
+      - 'package.json'
+      - 'capacitor.config.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      HAS_KEYSTORE: ${{ secrets.CARNIVAL_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Game tests
+        run: npm test
+
+      - name: Copy the game into the Android project
+        run: npm run android:sync
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: carnival-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Build signed release bundle (only if signing secrets are set)
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
+        working-directory: android
+        env:
+          CARNIVAL_KEYSTORE_PASSWORD: ${{ secrets.CARNIVAL_KEYSTORE_PASSWORD }}
+          CARNIVAL_KEY_ALIAS: ${{ secrets.CARNIVAL_KEY_ALIAS }}
+          CARNIVAL_KEY_PASSWORD: ${{ secrets.CARNIVAL_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.CARNIVAL_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          CARNIVAL_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks" ./gradlew bundleRelease --no-daemon
+
+      - name: Upload release bundle
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: carnival-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab

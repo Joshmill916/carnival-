@@ -52,6 +52,7 @@ export class SceneManager {
   push(key, params) {
     this.top?.onPause();
     const scene = this._make(key);
+    scene.key = key;
     this.stack.push(scene);
     scene.onEnter(params);
     return scene;
@@ -61,6 +62,7 @@ export class SceneManager {
     const old = this.stack.pop();
     old?.onExit();
     const scene = this._make(key);
+    scene.key = key;
     this.stack.push(scene);
     scene.onEnter(params);
     return scene;
