@@ -6,7 +6,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 8px;
+  padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 8px) 10px 8px;
 }
 .hud-stats { display: flex; gap: 6px; flex-wrap: wrap; }
 .stat {
@@ -57,7 +57,7 @@
 /* ---- Quit button (in mini-games) --------------------------------------- */
 .quit-btn {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 8px);
   left: 10px;
   width: 40px; height: 40px;
   border-radius: 14px;
@@ -229,7 +229,7 @@
 .toast {
   position: absolute;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 28px);
   transform: translateX(-50%) translateY(20px);
   background: rgba(5, 4, 14, 0.92);
   border: 1px solid var(--neon-cyan);

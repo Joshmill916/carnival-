@@ -1,6 +1,7 @@
 // Synthesized WebAudio blips — no asset files. Lazily creates the AudioContext on
 // the first user gesture (required by mobile browsers) and respects the mute flag.
 import { State } from '../data/State.js';
+import { haptic } from './Native.js';
 
 class AudioEngine {
   constructor() {
@@ -38,10 +39,14 @@ class AudioEngine {
   throw_() {
     this._tone(220, 90, 'sawtooth', 0.05);
   }
+  // Each cue also gives a matching buzz on phones (see Native.haptic), so the
+  // big moments are felt as well as heard.
   hit() {
+    haptic('light');
     this._tone(440, 70, 'square');
   }
   win() {
+    haptic('success');
     this._tone(660, 90, 'square');
     setTimeout(() => this._tone(880, 120, 'square'), 90);
   }
@@ -56,6 +61,7 @@ class AudioEngine {
   }
   // Ascending arpeggio for a big win / level up.
   fanfare() {
+    haptic('success');
     const notes = [523, 659, 784, 1047];
     notes.forEach((f, i) => setTimeout(() => this._tone(f, 160, 'square', 0.06), i * 110));
   }
@@ -71,26 +77,31 @@ class AudioEngine {
   }
   // Low thud on landing.
   thud() {
+    haptic('medium');
     this._tone(120, 160, 'square', 0.07);
   }
   // Wet "splat" for a food-stall eruption.
   splat() {
+    haptic('medium');
     this._tone(200, 120, 'sawtooth', 0.06);
     setTimeout(() => this._tone(140, 120, 'square', 0.05), 50);
   }
   // Springy "boing" for bouncing off someone's head.
   stomp() {
+    haptic('medium');
     this._tone(330, 70, 'square', 0.06);
     setTimeout(() => this._tone(660, 90, 'square', 0.05), 45);
   }
   // Squashed flat: a deflating squelch.
   squash() {
+    haptic('heavy');
     this._tone(520, 90, 'sawtooth', 0.06);
     setTimeout(() => this._tone(260, 120, 'sawtooth', 0.05), 70);
     setTimeout(() => this._tone(130, 160, 'square', 0.05), 150);
   }
   // Short high pop.
   pop() {
+    haptic('light');
     this._tone(880, 60, 'triangle', 0.05);
   }
 }

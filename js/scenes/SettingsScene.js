@@ -17,10 +17,15 @@ export class SettingsScene extends Scene {
 
   _render() {
     const muted = State.s.settings.muted;
+    const buzz = State.s.settings.haptics !== false;
     this.modal.body.innerHTML = `
       <label class="setting-row">
         <span>Sound</span>
         <input type="checkbox" id="set-sound" ${muted ? '' : 'checked'}>
+      </label>
+      <label class="setting-row">
+        <span>Vibration</span>
+        <input type="checkbox" id="set-haptics" ${buzz ? 'checked' : ''}>
       </label>
       <p class="muted">Progress saves automatically on this device.</p>
       <div class="setting-section">
@@ -30,6 +35,10 @@ export class SettingsScene extends Scene {
     `;
     this.modal.body.querySelector('#set-sound').addEventListener('change', (e) => {
       State.s.settings.muted = !e.target.checked;
+      State.save();
+    });
+    this.modal.body.querySelector('#set-haptics').addEventListener('change', (e) => {
+      State.s.settings.haptics = e.target.checked;
       State.save();
     });
 

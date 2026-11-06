@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.joshmill916.carnival",
+  "appName": "Carnival",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0a0918"
+  }
+}

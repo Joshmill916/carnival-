@@ -5,6 +5,7 @@ import { Audio } from './core/Audio.js';
 import { State } from './data/State.js';
 import { recompute, awardTickets } from './systems/Progression.js';
 import { bus } from './core/EventBus.js';
+import { isNative, installBackButton } from './core/Native.js';
 
 const canvas = document.getElementById('game');
 const canvas3d = document.getElementById('game3d');
@@ -25,7 +26,12 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => State.flush());
 
 // Register the offline service worker (only over http/https, not file://).
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+// Inside the Android app: wire the system Back button. The app ships its files
+// inside the APK, so it needs no offline service worker (which would only risk
+// serving a stale copy after an app update).
+if (isNative()) installBackButton(game);
+
+if (!isNative() && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
   // A worker already controlling the page at load means any later
   // controllerchange is a NEW build taking over — reload once to run it.
   const hadController = !!navigator.serviceWorker.controller;
